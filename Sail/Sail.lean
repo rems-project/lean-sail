@@ -126,7 +126,7 @@ def round4 (n : Nat) := ((n - 1) / 4) * 4 + 4
 def parse_hex_bits_digits (n : Nat) (str : String) : BitVec n :=
   let len := str.length
   if h : n < 4 || len = 0 then BitVec.zero n else
-    let bv := parse_hex_bits_digits (n-4) (str.take (len-1))
+    let bv := parse_hex_bits_digits (n-4) (str.take (len-1)).toString
     let c := String.Pos.Raw.get! str ⟨len-1⟩ |> charToHex
     BitVec.append bv c |>.cast (by simp_all)
 decreasing_by simp_all <;> omega
@@ -139,21 +139,21 @@ where
     if fuel = 0 then 0 else
       let lsd := String.Pos.Raw.get! str ⟨str.length - 1⟩
       let rest := str.take (str.length - 1)
-      (charToHex lsd).setWidth n + 10#n * go (fuel-1) rest
+      (charToHex lsd).setWidth n + 10#n * go (fuel-1) rest.toString
 
 def parse_hex_bits (n : Nat) (str : String) : BitVec n :=
-  let bv := parse_hex_bits_digits (round4 n) (str.drop 2)
+  let bv := parse_hex_bits_digits (round4 n) (str.drop 2).toString
   bv.setWidth n
 
 def valid_hex_bits (n : Nat) (str : String) : Bool :=
   if str.length < 2 then false else
-  let str := str.drop 2
+  let str := str.drop 2 |>.toString
   str.all fun x => x.toLower ∈
     ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'] &&
   2 ^ n > (parse_hex_bits_digits (round4 n) str).toNat
 
 def valid_dec_bits (_ : Nat) (str : String) : Bool :=
-  str.all fun x => x.toLower ∈
+  str.all fun (x : Char) => x.toLower ∈
     ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 
 @[simp_sail]
@@ -235,7 +235,7 @@ def set_slice {n : Nat} (m : Nat) (bv : BitVec n) (start : Nat) (bv' : BitVec m)
   BitVec.updateSubrange' bv start m bv'
 
 def String.leadingSpaces (s : String) : Nat :=
-  s.length - (s.dropWhile (· = ' ')).length
+  s.length - (s.dropWhile (· = ' ')).utf8ByteSize
 
 abbrev Vector.length (_v : Vector α n) : Nat := n
 
