@@ -1,4 +1,5 @@
 import Sail.Attr
+import Sail.ArchSem
 
 import Std.Data.ExtDHashMap
 import Std.Data.ExtHashMap
@@ -258,24 +259,9 @@ instance : HShiftRight (BitVec w) Int (BitVec w) where
 
 section PreSailTypes
 
-inductive Primitive where
-  | bool
-  | bit
-  | int
-  | nat
-  | string
-  | fin (n : Nat)
-  | bitvector (n : Nat)
+open ArchSem
 
-abbrev Primitive.reflect : Primitive → Type
-  | bool => Bool
-  | bit => BitVec 1
-  | int => Int
-  | nat => Nat
-  | string => String
-  | fin n => Fin (n + 1)
-  | bitvector n => BitVec n
-
+/-
 structure ChoiceSource where
   (α : Type)
   (nextState : Primitive → α → α)
@@ -293,7 +279,9 @@ def trivialChoiceSource : ChoiceSource where
     | .string => ""
     | .fin _ => 0
     | .bitvector _ => 0
+-/
 
+/-
 class ConcurrencyInterfaceV1.Arch where
   va_size : Nat
   pa : Type
@@ -333,7 +321,7 @@ class ConcurrencyInterfaceV2.Arch where
   tlbi : Type
   exn : Type
   sys_reg_id : Type
-
+-/
 
 /- The Units are placeholders for a future implementation of the state monad some Sail functions use. -/
 inductive Error (ue: Type) where
@@ -350,12 +338,6 @@ def Error.print : Error UE → String
   | OutOfMemoryRange n => s!"{n} Out of Memory Range"
   | Assertion s => s!"Assertion failed: {s}"
   | User _ => "Uncaught user exception"
-
-inductive Result (α : Type) (β : Type) where
-  | Ok (_ : α)
-  | Err (_ : β)
-  deriving Repr
-export Result(Ok Err)
 
 namespace ConcurrencyInterfaceV1
 
@@ -415,14 +397,17 @@ end ConcurrencyInterfaceV1
 
 namespace ConcurrencyInterfaceV2
 
+/-
 attribute [reducible] Arch.exn Arch.cache_op Arch.barrier Arch.trans_start Arch.trans_end Arch.tlbi
+-/
 
+/- CR clang: rename n, nt -/
 structure Mem_request (n : Nat) (nt : Nat) (addr_size : Nat) (addr_space : Type) (mem_acc : Type) where
   access_kind : mem_acc
   address : BitVec addr_size
   address_space : addr_space
-  size : Nat
-  num_tag : Nat
+  size : {k : Nat // k = n}
+  num_tag : {k : Nat // k = nt}
 
 end ConcurrencyInterfaceV2
 
@@ -447,11 +432,15 @@ end Sail
 namespace PreSail
 
 open Sail
+open ArchSem
 
 section Regs
 
+/-
 variable {Register : Type} {RegisterType : Register → Type} [DecidableEq Register] [Hashable Register]
+-/
 
+/-
 structure SequentialState (RegisterType : Register → Type) (c : ChoiceSource) where
   regs : Std.ExtDHashMap Register RegisterType
   choiceState : c.α
@@ -459,120 +448,134 @@ structure SequentialState (RegisterType : Register → Type) (c : ChoiceSource) 
   tags : Unit
   cycleCount : Nat -- Part of the concurrency interface. See `{get_}cycle_count`
   sailOutput : Array String -- TODO: be able to use the IO monad to run
+-/
 
-inductive RegisterRef (RegisterType : Register → Type) : Type → Type where
-  | Reg (r : Register) : RegisterRef _ (RegisterType r)
+/- CR clang : why do we need this? (RegisterRef) -/
+variable [Arch]
+inductive RegisterRef : Type → Type where
+  | Reg (r : Arch.register) : RegisterRef (Arch.register_type r)
 export RegisterRef (Reg)
 
+/-
 abbrev PreSailM (RegisterType : Register → Type) (c : ChoiceSource) (ue: Type) :=
   EStateM (Error ue) (SequentialState RegisterType c)
+-/
+/- CR clang: give ue a more descriptive var name 'userError'. -/
+abbrev PreSailM (ue : Type) := FreeM (Result InstructionEffect (Error ue)) (fun | .Ok eff => eff.ret | .Err _ => Empty)
 
 @[simp_sail]
-def sailTryCatch (e : PreSailM RegisterType c ue α) (h : ue → PreSailM RegisterType c ue α) :
-    PreSailM RegisterType c ue α :=
-  EStateM.tryCatch e fun e =>
-    match e with
-    | .User u => h u
-    | _ => EStateM.throw e
+def sailTryCatch (e : PreSailM ue α) (h : ue → PreSailM ue α) : PreSailM ue α :=
+  match e with
+  | .pure v => .pure v
+  | .impure (.Err (.User e)) _cont => h e
+  | .impure eff cont => .impure eff (fun v => sailTryCatch (cont v) h)
 
 @[simp_sail]
-def sailThrow (e : ue) : PreSailM RegisterType c ue α := EStateM.throw (.User e)
+def sailThrow (e : ue) : PreSailM ue α := .impure (.Err (.User e)) Empty.elim
 
-def choose (p : Primitive) : PreSailM RegisterType c ue p.reflect :=
-  modifyGet
-    (fun σ => (c.choose _ σ.choiceState, { σ with choiceState := c.nextState p σ.choiceState }))
+instance: MonadExceptOf (Error userError) (PreSailM userError) where
+  throw e := FreeM.impure (.Err e) Empty.elim
+  tryCatch eff h :=
+    let rec tryCatch eff h := match eff with
+    | .pure v => .pure v
+    | .impure (.Err e) _cont => h e
+    | .impure (.Ok eff) cont => .impure (.Ok eff) (fun v => tryCatch (cont v) h)
+  tryCatch eff h
 
-def undefined_unit (_ : Unit) : PreSailM RegisterType c ue Unit := pure ()
+def choose (p : Primitive) : PreSailM ue p.reflect :=
+  .impure (Result.Ok (InstructionEffect.choice p)) .pure
 
-def undefined_bit (_ : Unit) : PreSailM RegisterType c ue (BitVec 1) :=
+def undefined_unit (_ : Unit) : PreSailM ue Unit := pure ()
+
+def undefined_bit (_ : Unit) : PreSailM ue (BitVec 1) :=
   choose .bit
 
-def undefined_bool (_ : Unit) : PreSailM RegisterType c ue Bool :=
+def undefined_bool (_ : Unit) : PreSailM ue Bool :=
   choose .bool
 
-def undefined_int (_ : Unit) : PreSailM RegisterType c ue Int :=
+def undefined_int (_ : Unit) : PreSailM ue Int :=
   choose .int
 
-def undefined_range (low high : Int) : PreSailM RegisterType c ue Int := do
+def undefined_range (low high : Int) : PreSailM ue Int := do
   pure (low + (← choose .int) % (high - low))
 
-def undefined_nat (_ : Unit) : PreSailM RegisterType c ue Nat :=
+def undefined_nat (_ : Unit) : PreSailM ue Nat :=
   choose .nat
 
-def undefined_string (_ : Unit) : PreSailM RegisterType c ue String :=
+def undefined_string (_ : Unit) : PreSailM ue String :=
   choose .string
 
-def undefined_bitvector (n : Nat) : PreSailM RegisterType c ue (BitVec n) :=
+def undefined_bitvector (n : Nat) : PreSailM ue (BitVec n) :=
   choose <| .bitvector n
 
-def undefined_vector (n : Nat) (a : α) : PreSailM RegisterType c ue (Vector α n) :=
+def undefined_vector (n : Nat) (a : α) : PreSailM ue (Vector α n) :=
   pure <| .replicate n a
 
-def internal_pick {α : Type} : List α → PreSailM RegisterType c ue α
-  | [] => .error .Unreachable
+def internal_pick {α : Type} : List α → PreSailM ue α
+  | [] => .impure (.Err .Unreachable) Empty.elim
   | (a :: as) => do
     let idx ← choose <| .fin (as.length)
     pure <| (a :: as).get idx
 
 @[simp_sail]
-def writeReg (r : Register) (v : RegisterType r) : PreSailM RegisterType c ue PUnit :=
-  modify fun s => { s with regs := s.regs.insert r v }
+def writeReg (r : Arch.register) (v : Arch.register_type r) : PreSailM ue PUnit :=
+  FreeM.impure (Result.Ok (InstructionEffect.regWrite r Option.none v)) FreeM.pure
 
 @[simp_sail]
-def readReg (r : Register) : PreSailM RegisterType c ue (RegisterType r) := do
-  let .some s := (← get).regs.get? r
-    | throw .Unreachable
-  pure s
+def readReg (r : Arch.register) : PreSailM ue (Arch.register_type r) :=
+  FreeM.impure (Result.Ok (InstructionEffect.regRead r Option.none)) FreeM.pure
 
 @[simp_sail]
-def readRegRef (reg_ref : @RegisterRef Register RegisterType α) : PreSailM RegisterType c ue α := do
-  match reg_ref with | .Reg r => readReg r
+def readRegRef (reg_ref : RegisterRef α) : PreSailM ue α :=
+  let .Reg r := reg_ref
+  readReg r
 
 @[simp_sail]
-def writeRegRef (reg_ref : @RegisterRef Register RegisterType α) (a : α) :
-  PreSailM RegisterType c ue Unit := do
-  match reg_ref with | .Reg r => writeReg r a
+def writeRegRef (reg_ref : RegisterRef α) (v : α) : PreSailM ue Unit :=
+  let .Reg r := reg_ref
+  writeReg r v
 
 @[simp_sail]
-def reg_deref (reg_ref : @RegisterRef Register RegisterType α) : PreSailM RegisterType c ue α :=
+def reg_deref (reg_ref : RegisterRef α) : PreSailM ue α :=
   readRegRef reg_ref
 
 @[simp_sail]
-def assert (p : Bool) (s : String) : PreSailM RegisterType c ue Unit :=
-  if p then pure () else throw (.Assertion s)
+def assert (p : Bool) (s : String) : PreSailM ue Unit :=
+  if p then .pure () else .impure (.Err (.Assertion s)) Empty.elim
 
 section ConcurrencyInterface
 
+/-
 @[simp_sail]
-def writeByte (addr : Nat) (value : BitVec 8) : PreSailM RegisterType c ue PUnit := do
+def writeByte (addr : Nat) (value : BitVec 8) : PreSailM ue PUnit := do
   modify fun s => { s with mem := s.mem.insert addr value }
 
 @[simp_sail]
-def writeBytes (addr : Nat) (value : BitVec (8 * n)) : PreSailM RegisterType c ue Bool := do
+def writeBytes (addr : Nat) (value : BitVec (8 * n)) : PreSailM ue Bool := do
   let list := List.ofFn (λ i : Fin n => (addr + i.val, value.extractLsb' (8 * i.val) 8))
   List.forM list (λ (a, v) => writeByte a v)
   pure true
 
 @[simp_sail]
-def writeByteVec (addr : Nat) (value : Vector (BitVec 8) n) : PreSailM RegisterType c ue Bool := do
+def writeByteVec (addr : Nat) (value : Vector (BitVec 8) n) : PreSailM ue Bool := do
   let list := List.ofFn (λ i : Fin n => (addr + i.val, value[i]))
   List.forM list (λ (a, v) => writeByte a v)
   pure true
 
 @[simp_sail]
 def write_ram (addr_size data_size : Nat) (_hex_ram addr : BitVec addr_size) (value : BitVec (8 * data_size)) :
-    PreSailM RegisterType c ue Unit := do
+    PreSailM ue Unit := do
   let _ ← writeBytes addr.toNat value
   pure ()
 
 @[simp_sail]
-def readByte (addr : Nat) : PreSailM RegisterType c ue (BitVec 8) := do
+def readByte (addr : Nat) : PreSailM ue (BitVec 8) := do
   let .some s := (← get).mem.get? addr
     | throw (.OutOfMemoryRange addr)
   pure s
 
 @[simp_sail]
-def readBytes (size : Nat) (addr : Nat) : PreSailM RegisterType c ue ((BitVec (8 * size)) × Option Bool) :=
+def readBytes (size : Nat) (addr : Nat) : PreSailM ue ((BitVec (8 * size)) × Option Bool) :=
   match size with
   | 0 => pure (default, none)
   | 1 => do
@@ -587,7 +590,7 @@ def readBytes (size : Nat) (addr : Nat) : PreSailM RegisterType c ue ((BitVec (8
 
 @[simp_sail]
 def readBytesVec (size : Nat) (addr : Nat) :
-    PreSailM RegisterType c ue ((Vector (BitVec 8) size) × Vector Bool nt) :=
+    PreSailM ue ((Vector (BitVec 8) size) × Vector Bool nt) :=
   match size with
   | 0 => pure (default, default)
   | 1 => do
@@ -597,7 +600,9 @@ def readBytesVec (size : Nat) (addr : Nat) :
     let b ← readByte (addr + n)
     let (bytes, bool) ← readBytesVec n addr
     return (bytes.push b, bool)
+-/
 
+/-
 namespace ConcurrencyInterfaceV1
 
 open Sail.ConcurrencyInterfaceV1
@@ -633,111 +638,171 @@ def sail_take_exception [Arch] (_ : Arch.fault) : PreSailM RegisterType c ue Uni
 def sail_return_exception [Arch] (_ : Arch.pa) : PreSailM RegisterType c ue Unit := pure ()
 
 end ConcurrencyInterfaceV1
+-/
 
 namespace ConcurrencyInterfaceV2
 
 open Sail.ConcurrencyInterfaceV2
+open ArchSem
+
+/- CR clang: put these utility functions somewhere better. -/
+def vecbytes_to_bitvec (vec : Vector (BitVec 8) n) : BitVec (8 * n) :=
+  vec.foldl (fun (i, acc) x => (i+1, BitVec.updateSubrange' acc n 8 x)) (0, BitVec.zero (8 * n))
+  |> Prod.snd
+def bitvec_to_vecbytes (bitvec : BitVec (8 * n)) : Vector (BitVec 8) n :=
+  Vector.ofFn (fun i => BitVec.slice bitvec (8 * i) 8)
+def vecbool_to_bitvec (vec : Vector Bool n) : BitVec n :=
+  vec.foldl (fun (i, acc) b => (i+1, BitVec.updateSubrange' acc n 1 (BitVec.ofBool b))) (0, BitVec.zero n)
+  |> Prod.snd
+def bitvec_to_vecbool (bitvec : BitVec n) : Vector Bool n :=
+  Vector.ofFn (fun i => BitVec.getLsb bitvec i)
+def sail_mem_requset_to_archsem (mem_req : Mem_request size num_tag Arch.addr_size Arch.addr_space Arch.mem_acc) : ArchSem.MemRequest :=
+    { accessKind := mem_req.access_kind
+    , address := mem_req.address
+    , addressSpace := mem_req.address_space
+    , size := mem_req.size
+    , numTag := mem_req.num_tag }
 
 @[simp_sail]
-def sail_mem_read [Arch] (req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) :
-    PreSailM RegisterType c ue (Result ((Vector (BitVec 8) n) × (Vector Bool nt)) Arch.abort) := do
-  let addr := req.address.toNat
-  let value ← readBytesVec n addr
-  pure (Ok value)
+def sail_mem_read [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) :
+    PreSailM ue (Result ((Vector (BitVec 8) n) × (Vector Bool nt)) Arch.abort) :=
+  let req := sail_mem_requset_to_archsem mem_req
+  /- CR clang: there must be a cleaner way to write this -/
+  have h : (req.size = n) ∧ (req.numTag = nt) := by
+    simp [req, sail_mem_requset_to_archsem]
+    simp [mem_req.size.property, mem_req.num_tag.property]
+  FreeM.impure (.Ok (InstructionEffect.memRead req))
+    (FreeM.pure ∘ Result.map (fun (bytes,tags) =>
+      (bitvec_to_vecbytes (And.left h ▸ bytes), bitvec_to_vecbool (And.right h ▸ tags))))
 
-def sail_mem_write [Arch] (req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) (valueBytes : Vector (BitVec 8) n) (_tags : Vector Bool nt) :
-    PreSailM RegisterType c ue (Result (Option Bool) Arch.abort) := do
-  let addr := req.address.toNat
-  let b ← writeByteVec addr valueBytes
-  pure (Ok (some b))
+/- CR clang: why does this return an option bool. I just set to none always. -/
+def sail_mem_write [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) (valueBytes : Vector (BitVec 8) n) (tags : Vector Bool nt) :
+    PreSailM ue (Result (Option Bool) Arch.abort) :=
+  let req := sail_mem_requset_to_archsem mem_req
+  have h : (req.size = n) ∧ (req.numTag = nt) := by
+    simp [req, sail_mem_requset_to_archsem]
+    simp [mem_req.size.property, mem_req.num_tag.property]
+  FreeM.impure (.Ok (InstructionEffect.memWrite req
+    (vecbytes_to_bitvec (And.left h ▸ valueBytes)) (vecbool_to_bitvec (And.right h ▸ tags))))
+    (fun | .Ok () => .pure (.Ok .none) | .Err e => .pure (.Err e))
 
 @[simp_sail]
-def sail_sys_reg_read [Arch] (_id : Arch.sys_reg_id) (r : @RegisterRef Register RegisterType α) : PreSailM RegisterType c ue α :=
+def sail_sys_reg_read [Arch] (_id : Arch.sys_reg_id) (r : RegisterRef α) : PreSailM ue α :=
   readRegRef r
 
 @[simp_sail]
-def sail_sys_reg_write [Arch] (_id : Arch.sys_reg_id) (r : @RegisterRef Register RegisterType α) (v : α) :
-    PreSailM RegisterType c ue Unit :=
+def sail_sys_reg_write [Arch] (_id : Arch.sys_reg_id) (r : RegisterRef α) (v : α) : PreSailM ue Unit :=
   writeRegRef r v
 
-def sail_mem_address_announce [Arch] (_ann : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) : PreSailM RegisterType c ue Unit :=
+def sail_mem_address_announce [Arch] (_ann : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) : PreSailM ue Unit :=
   pure ()
 
 @[simp_sail]
-def sail_translation_start [Arch] (_ : Arch.trans_start) : PreSailM RegisterType c ue Unit := pure ()
+def sail_translation_start [Arch] (_ : Arch.trans_start) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_translation_end [Arch] (_ : Arch.trans_end) : PreSailM RegisterType c ue Unit := pure ()
+def sail_translation_end [Arch] (_ : Arch.trans_end) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_barrier [Arch] (_ : Arch.barrier) : PreSailM RegisterType c ue Unit := pure ()
+def sail_barrier [Arch] (_ : Arch.barrier) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_take_exception [Arch] (_ : Arch.exn) : PreSailM RegisterType c ue Unit := pure ()
+def sail_take_exception [Arch] (_ : Arch.exn) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_return_exception (_ : Unit) : PreSailM RegisterType c ue Unit := pure ()
+def sail_return_exception (_ : Unit) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_cache_op [Arch] (_ : Arch.cache_op) : PreSailM RegisterType c ue Unit := pure ()
+def sail_cache_op [Arch] (_ : Arch.cache_op) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_tlbi [Arch] (_ : Arch.tlbi) : PreSailM RegisterType c ue Unit := pure ()
+def sail_tlbi [Arch] (_ : Arch.tlbi) : PreSailM ue Unit := pure ()
 
 end ConcurrencyInterfaceV2
 
+/-
 @[simp_sail]
-def read_ram (addr_size data_size : Nat) (_hex_ram addr : BitVec addr_size) : PreSailM RegisterType c ue (BitVec (8 * data_size)) := do
+def read_ram (addr_size data_size : Nat) (_hex_ram addr : BitVec addr_size) : PreSailM ue (BitVec (8 * data_size)) := do
   let ⟨bytes, _⟩ ← readBytes data_size addr.toNat
   pure bytes
+-/
 
 @[simp_sail]
-def cycle_count (_ : Unit) : PreSailM RegisterType c ue Unit :=
-  modify fun s => { s with cycleCount := s.cycleCount + 1 }
+def cycle_count (_ : Unit) : PreSailM ue Unit :=
+  .impure (.Ok (.clockCycle)) .pure
 
 @[simp_sail]
-def get_cycle_count (_ : Unit) : PreSailM RegisterType c ue Nat := do
-  pure (← get).cycleCount
+def get_cycle_count (_ : Unit) : PreSailM ue Nat := do
+  .impure (.Ok (.getCycleCount)) .pure
 
 end ConcurrencyInterface
 
-def print_effect (str : String) : PreSailM RegisterType c ue Unit :=
-  modify fun s ↦ { s with sailOutput := s.sailOutput.push str }
+def print_effect (str : String) : PreSailM ue Unit :=
+  .impure (.Ok (.printMessage str)) .pure
 
-def print_int_effect (str : String) (n : Int) : PreSailM RegisterType c ue Unit :=
+def print_int_effect (str : String) (n : Int) : PreSailM ue Unit :=
   print_effect s!"{str}{n}\n"
 
-def print_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM RegisterType c ue Unit :=
+def print_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM ue Unit :=
   print_effect s!"{str}{BitVec.toFormatted x}\n"
 
-def print_endline_effect (str : String) : PreSailM RegisterType c ue Unit :=
+def print_endline_effect (str : String) : PreSailM ue Unit :=
   print_effect s!"{str}\n"
 
+/-
 @[simp_sail]
-def sailTryCatchE (e : ExceptT β (PreSailM RegisterType c ue) α) (h : ue → ExceptT β (PreSailM RegisterType c ue) α) : ExceptT β (PreSailM RegisterType c ue) α :=
+def sailTryCatchE (e : ExceptT β (PreSailM ue) α) (h : ue → ExceptT β (PreSailM ue) α) : ExceptT β (PreSailM ue) α :=
   EStateM.tryCatch e fun e =>
     match e with
     | .User u => h u
     | _ => EStateM.throw e
+-/
 
 end Regs
 
 section SailME
 
+open ArchSem
+variable [Arch]
+
+/-
 variable {Register : Type} {RT : Register → Type} [DecidableEq Register] [Hashable Register]
-
 variable (RT) in
-abbrev PreSailME c ue α := ExceptT (Error ue ⊕ α) (PreSailM RT c ue)
+abbrev PreSailME ue α := ExceptT (Error ue ⊕ α) (PreSailM RT c ue)
+-/
 
+abbrev PreSailME ue exception := FreeM (Result (Result InstructionEffect (Error ue)) exception)
+  (fun | .Ok (.Ok eff) => eff.ret | .Ok (.Err _) => Empty | _ => Empty)
+
+/-
 instance: MonadExceptOf (Error ue) (PreSailME RT c ue α) where
   throw e := MonadExcept.throw (.inl e)
   tryCatch x h := MonadExcept.tryCatch x (fun e => match e with | .inl e => h e | .inr _ => MonadExcept.throw e)
+-/
 
-def PreSailME.run (m : PreSailME RT c ue α α) : PreSailM RT c ue α := do
-  match (← ExceptT.run m) with
-    | .error (.inr e) => pure e
-    | .error (.inl e) => throw e
-    | .ok e => pure e
+/- CR clang: so this only throws and catches `Error ue`... -/
+instance: MonadExceptOf (Error ue) (PreSailME ue α) where
+  throw e := .impure (.Ok (.Err e)) Empty.elim
+  tryCatch eff h :=
+    let rec tryCatch eff h :=
+      match eff with
+        | .pure v => .pure v
+        | .impure (.Ok (.Err e)) _cont => h e
+        | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
+    tryCatch eff h
+
+def PreSailME.run : PreSailME ue α α → PreSailM ue α
+ | .pure v => .pure v
+ | .impure (.Err ret) _cont => .pure ret
+ | .impure (.Ok eff) cont => .impure eff (fun v => PreSailME.run (cont (cast (by split <;> rfl) v)))
+
+/-
+def PreSailME.map_error (e : PreSailME ue ε α) (f : ε → ε') : PreSailME ue ε' α :=
+  match e with
+  | .pure v => .pure v
+  | .impure (.Err e) cont => .impure (.Err (f e)) Empty.elim
+  | .impure (.Ok eff) cont => .impure (.Ok eff)
+    (fun v => PreSailME.map_error (cont (cast (by ) v)) f)
 
 def _root_.ExceptT.map_error [Monad m] (e : ExceptT ε m α) (f : ε → ε') : ExceptT ε' m α :=
   ExceptT.mk <| do
@@ -746,14 +811,25 @@ def _root_.ExceptT.map_error [Monad m] (e : ExceptT ε m α) (f : ε → ε') : 
     | .error e => pure $ .error (f e)
 
 instance [∀ x, CoeT α x α'] :
-    CoeT (PreSailME RT c ue α β) e (PreSailME RT c ue α' β) where
+    CoeT (PreSailME ue α β) e (PreSailME ue α' β) where
   coe := e.map_error (fun x => match x with | .inl e => .inl e | .inr e => .inr e)
+-/
 
-def PreSailME.throw (e : α) : PreSailME RT c ue α β :=
-    MonadExceptOf.throw (Sum.inr (α := Error ue) e)
+def PreSailME.throw (e : α) : PreSailME ue α β :=
+  .impure (.Err e) Empty.elim
 
+/-
 instance : Inhabited (PreSail.SequentialState RT trivialChoiceSource) where
   default := ⟨default, (), default, default, default, default⟩
+-/
+
+instance : MonadLift (PreSailM ue) (PreSailME ue ε) where
+  monadLift m :=
+    let rec lift m :=
+      match m with
+      | .pure v => .pure v
+      | .impure eff cont => .impure (.Ok eff) (fun v => lift (cont (cast (by symm ; split <;> rfl) v)))
+    lift m
 
 end SailME
 
@@ -770,9 +846,12 @@ namespace Sail
 
 open PreSail
 
-variable {Register : Type} {RegisterType : Register → Type} [DecidableEq Register] [Hashable Register]
+/-
+variable {Register : Type} {RegisterType : Register → Type} [DecidableEq Regile Register]
+-/
 
-def main_of_sail_main (initialState : SequentialState RegisterType c) (main : Unit → PreSailM RegisterType c ue Unit) : IO UInt32 := do
+/-
+def main_of_sail_main (initialState : SequentialState RegisterType c) (main : Unit → PreSailM ue Unit) : IO UInt32 := do
   let res := main () |>.run initialState
   match res with
   | .ok _ s => do
@@ -784,6 +863,7 @@ def main_of_sail_main (initialState : SequentialState RegisterType c) (main : Un
       IO.print m
     IO.eprintln s!"Error while running the sail program!: {e.print}"
     return 1
+-/
 
 end Sail
 
