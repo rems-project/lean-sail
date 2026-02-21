@@ -749,15 +749,6 @@ def print_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM ue Unit
 def print_endline_effect (str : String) : PreSailM ue Unit :=
   print_effect s!"{str}\n"
 
-/-
-@[simp_sail]
-def sailTryCatchE (e : ExceptT β (PreSailM ue) α) (h : ue → ExceptT β (PreSailM ue) α) : ExceptT β (PreSailM ue) α :=
-  EStateM.tryCatch e fun e =>
-    match e with
-    | .User u => h u
-    | _ => EStateM.throw e
--/
-
 end Regs
 
 section SailME
@@ -780,7 +771,29 @@ instance: MonadExceptOf (Error ue) (PreSailME RT c ue α) where
   tryCatch x h := MonadExcept.tryCatch x (fun e => match e with | .inl e => h e | .inr _ => MonadExcept.throw e)
 -/
 
+instance: MonadExcept ue (PreSailME ue α) where
+  throw e := .impure (.Ok (.Err (.User e))) Empty.elim
+  tryCatch eff h :=
+    let rec tryCatch eff h :=
+      match eff with
+        | .pure v => .pure v
+        | .impure (.Ok (.Err (.User err))) _cont => h err
+        | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
+    tryCatch eff h
+
+/-
+ - CR clang: this is here for compatability with Out/Specialization.lean in the generated isa spec.
+ - I've just duplicated the above tryCatch func.
+ -/
+def sailTryCatchE (eff : PreSailME ue e α) (h : ue → PreSailME ue e α) : PreSailME ue e α :=
+  match eff with
+    | .pure v => .pure v
+    | .impure (.Ok (.Err (.User err))) _cont => h err
+    | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
+
+
 /- CR clang: so this only throws and catches `Error ue`... -/
+/-
 instance: MonadExceptOf (Error ue) (PreSailME ue α) where
   throw e := .impure (.Ok (.Err e)) Empty.elim
   tryCatch eff h :=
@@ -790,6 +803,7 @@ instance: MonadExceptOf (Error ue) (PreSailME ue α) where
         | .impure (.Ok (.Err e)) _cont => h e
         | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
     tryCatch eff h
+-/
 
 def PreSailME.run : PreSailME ue α α → PreSailM ue α
  | .pure v => .pure v
