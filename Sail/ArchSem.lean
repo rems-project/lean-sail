@@ -48,11 +48,11 @@ abbrev Primitive.reflect : Primitive → Type
 /- CR clang: Add some comments explaining the fields of Arch. -/
 class Arch where
   addr_size : Nat
+  addr_space : Type
   CHERI : Bool
   cap_size_log : Nat
   register : Type
   register_type : register → Type
-  addr_space : Type
   mem_acc : Type
   mem_acc_is_explicit : mem_acc -> Bool
   mem_acc_is_ifetch : mem_acc -> Bool
@@ -99,7 +99,8 @@ inductive InstructionEffect where
   | barrier (barrier : Arch.barrier)
   | cacheOp (op : Arch.cache_op)
   | tlbOp (op : Arch.tlbi)
-  | choice (primitive : Primitive)
+  /- | choice (primitive : Primitive) -/
+  | choice (n : Nat)
   | clockCycle
   | getCycleCount
   | translationStart (translationStart : Arch.trans_start)
@@ -119,7 +120,8 @@ def InstructionEffect.ret : InstructionEffect → Type
   | .barrier _ => Unit
   | .cacheOp _ => Unit
   | .tlbOp _ => Unit
-  | .choice primitive => primitive.reflect
+  /- | .choice primitive => primitive.reflect -/
+  | .choice n => Fin n
   | .clockCycle => Unit
   | .getCycleCount => Nat
   | .translationStart _ => Unit

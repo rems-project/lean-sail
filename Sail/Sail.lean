@@ -482,40 +482,66 @@ instance: MonadExceptOf (Error userError) (PreSailM userError) where
     | .impure (.Ok eff) cont => .impure (.Ok eff) (fun v => tryCatch (cont v) h)
   tryCatch eff h
 
+/-
 def choose (p : Primitive) : PreSailM ue p.reflect :=
   .impure (Result.Ok (InstructionEffect.choice p)) .pure
+-/
+
+def choose_fin (n : Nat) : PreSailM ue (Fin n) :=
+  FreeM.impure (Result.Ok (InstructionEffect.choice n)) FreeM.pure
 
 def undefined_unit (_ : Unit) : PreSailM ue Unit := pure ()
 
-def undefined_bit (_ : Unit) : PreSailM ue (BitVec 1) :=
-  choose .bit
+def undefined_bit (_ : Unit) : PreSailM ue (BitVec 1) := do
+  return BitVec.ofFin (← choose_fin 2)
 
-def undefined_bool (_ : Unit) : PreSailM ue Bool :=
-  choose .bool
+def undefined_bool (_ : Unit) : PreSailM ue Bool := do
+  return ((← choose_fin 2) == 0)
 
+/- CR clang: We no longer support infinite non-determinism. -/
+/-
 def undefined_int (_ : Unit) : PreSailM ue Int :=
   choose .int
+-/
 
 def undefined_range (low high : Int) : PreSailM ue Int := do
-  pure (low + (← choose .int) % (high - low))
+  return (low + (← choose_fin (high - low).toNat))
 
+/-
 def undefined_nat (_ : Unit) : PreSailM ue Nat :=
   choose .nat
+-/
 
+/-
 def undefined_string (_ : Unit) : PreSailM ue String :=
   choose .string
+-/
 
-def undefined_bitvector (n : Nat) : PreSailM ue (BitVec n) :=
-  choose <| .bitvector n
+def undefined_bitvector (n : Nat) : PreSailM ue (BitVec n) := do
+  return @BitVec.ofFin n (← choose_fin _)
 
+/- CR clang: Why was this being called undefined? -/
+/-
 def undefined_vector (n : Nat) (a : α) : PreSailM ue (Vector α n) :=
   pure <| .replicate n a
+-/
 
-def internal_pick {α : Type} : List α → PreSailM ue α
-  | [] => .impure (.Err .Unreachable) Empty.elim
-  | (a :: as) => do
-    let idx ← choose <| .fin (as.length)
-    pure <| (a :: as).get idx
+def internal_pick {α : Type} (l : List α) : PreSailM ue α := do
+  if l.isEmpty then
+    /-
+     - CR clang for thibaut: We have discussed this before, but when I came to make
+     - a change here, I realised that I still dont really understand. You told me
+     - that I should not throw Unreachable here. But then I'm not really sure what
+     - I can do? I need to produce a `PreSailM ue α`, but I have nowhere to get an α
+     - from, so I kind of need to use an Empty.elim. And I can only do that if I have
+     - an empty which I can only get by throwing some kind of error?
+     -
+     - The old state monad implementation was throwing unreachable:
+     - https://github.com/rems-project/lean-sail/blob/aed25177482c50db6a7d8da8144388cc69da10f2/Sail/Sail.lean#L518
+     -/
+    .impure (.Err .Unreachable) Empty.elim
+  else
+    return l.get (← choose_fin l.length)
 
 @[simp_sail]
 def writeReg (r : Arch.register) (v : Arch.register_type r) : PreSailM ue PUnit :=
