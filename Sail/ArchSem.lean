@@ -45,23 +45,15 @@ abbrev Primitive.reflect : Primitive → Type
 
 /- CR clang: I would like to use lean naming convention but this conflicts with sail. -/
 /- CR clang: previously in `namespace Sail.ConcurrencyInterfaceV2` -/
+/- CR clang: Add some comments explaining the fields of Arch. -/
 class Arch where
+  addr_size : Nat
+  CHERI : Bool
+  cap_size_log : Nat
   register : Type
   register_type : register → Type
-  sys_reg_id : Type
-  
-  addr_size : Nat
   addr_space : Type
   mem_acc : Type
-  abort : Type
-  barrier : Type
-  cache_op : Type
-  tlbi : Type
-  trans_start : Type
-  trans_end : Type
-  
-  exn : Type
-  
   mem_acc_is_explicit : mem_acc -> Bool
   mem_acc_is_ifetch : mem_acc -> Bool
   mem_acc_is_ttw : mem_acc -> Bool
@@ -71,10 +63,14 @@ class Arch where
   mem_acc_is_standalone : mem_acc -> Bool
   mem_acc_is_exclusive : mem_acc -> Bool
   mem_acc_is_atomic_rmw : mem_acc -> Bool
-  /-
-  CHERI : Bool
-  cap_size_log : Nat
-  -/
+  trans_start : Type
+  trans_end : Type
+  abort : Type
+  barrier : Type
+  cache_op : Type
+  tlbi : Type
+  exn : Type
+  sys_reg_id : Type
 
 variable [Arch]
 
