@@ -656,7 +656,7 @@ def vecbool_to_bitvec (vec : Vector Bool n) : BitVec n :=
   |> Prod.snd
 def bitvec_to_vecbool (bitvec : BitVec n) : Vector Bool n :=
   Vector.ofFn (fun i => BitVec.getLsb bitvec i)
-def sail_mem_requset_to_archsem (mem_req : Mem_request size num_tag Arch.addr_size Arch.addr_space Arch.mem_acc) : ArchSem.MemRequest :=
+def sail_mem_request_to_archsem (mem_req : Mem_request size num_tag Arch.addr_size Arch.addr_space Arch.mem_acc) : ArchSem.MemRequest :=
     { accessKind := mem_req.access_kind
     , address := mem_req.address
     , addressSpace := mem_req.address_space
@@ -666,10 +666,10 @@ def sail_mem_requset_to_archsem (mem_req : Mem_request size num_tag Arch.addr_si
 @[simp_sail]
 def sail_mem_read [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) :
     PreSailM ue (Result ((Vector (BitVec 8) n) × (Vector Bool nt)) Arch.abort) :=
-  let req := sail_mem_requset_to_archsem mem_req
+  let req := sail_mem_request_to_archsem mem_req
   /- CR clang: there must be a cleaner way to write this -/
   have h : (req.size = n) ∧ (req.numTag = nt) := by
-    simp [req, sail_mem_requset_to_archsem]
+    simp [req, sail_mem_request_to_archsem]
     simp [mem_req.size.property, mem_req.num_tag.property]
   FreeM.impure (.Ok (InstructionEffect.memRead req))
     (FreeM.pure ∘ Result.map (fun (bytes,tags) =>
@@ -678,9 +678,9 @@ def sail_mem_read [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_sp
 /- CR clang: why does this return an option bool. I just set to none always. -/
 def sail_mem_write [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) (valueBytes : Vector (BitVec 8) n) (tags : Vector Bool nt) :
     PreSailM ue (Result (Option Bool) Arch.abort) :=
-  let req := sail_mem_requset_to_archsem mem_req
+  let req := sail_mem_request_to_archsem mem_req
   have h : (req.size = n) ∧ (req.numTag = nt) := by
-    simp [req, sail_mem_requset_to_archsem]
+    simp [req, sail_mem_request_to_archsem]
     simp [mem_req.size.property, mem_req.num_tag.property]
   FreeM.impure (.Ok (InstructionEffect.memWrite req
     (vecbytes_to_bitvec (And.left h ▸ valueBytes)) (vecbool_to_bitvec (And.right h ▸ tags))))
