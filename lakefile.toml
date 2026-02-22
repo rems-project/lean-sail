@@ -3,4 +3,5 @@ defaultTargets = ["Sail"]
 
 [[lean_lib]]
 name = "Sail"
+globs = ["Sail.**"]
 leanOptions.weak.linter.style.nameCheck = false
