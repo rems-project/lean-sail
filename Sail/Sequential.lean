@@ -9,21 +9,13 @@ open ArchSem
 
 structure ChoiceSource where
   (α : Type)
-  (nextState : Primitive → α → α)
-  (choose : ∀ p : Primitive, α → p.reflect)
+  (nextState : Nat → α → α)
+  (choose : (n : Nat) → [NeZero n] → α → Fin n)
 
 def trivialChoiceSource : ChoiceSource where
   α := Unit
   nextState _ _ := ()
-  choose p _ :=
-    match p with
-    | .bool => false
-    | .bit => 0
-    | .int => 0
-    | .nat => 0
-    | .string => ""
-    | .fin _ => 0
-    | .bitvector _ => 0
+  choose _ _ _ := 0
 
 variable [Arch] [DecidableEq Arch.register] [Hashable Arch.register]
 
@@ -81,8 +73,13 @@ def interpretEffect : (eff : InstructionEffect) → EStateM (Error userError) (S
   | .barrier _barrier => .pure ()
   | .cacheOp _op => .pure ()
   | .tlbOp _op => .pure ()
-  | .choice primitive =>
-    modifyGet (fun σ => (c.choose _ σ.choiceState, { σ with choiceState := c.nextState primitive σ.choiceState }))
+  /-
+   - CR clang: Ahh, this makes me feel bad. Ideally we should 'reverse' back when we find a choice 0.
+   - CR clang for thibaut: Maybe we change the Effect type to disallow `choice 0`?
+   -/
+  | .choice 0 => throw .Unreachable
+  | .choice (n+1) =>
+    modifyGet (fun σ => (c.choose _ σ.choiceState, { σ with choiceState := c.nextState n σ.choiceState }))
   | .clockCycle => modify fun s => { s with cycleCount := s.cycleCount + 1 }
   | .getCycleCount => do pure (← get).cycleCount
   | .translationStart _translationStart => .pure ()
