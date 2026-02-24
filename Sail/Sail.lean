@@ -327,6 +327,7 @@ class ConcurrencyInterfaceV2.Arch where
 inductive Error (ue: Type) where
   | Exit
   | Unreachable
+  | InfiniteNondeterminisim
   | OutOfMemoryRange (n : Nat)
   | Assertion (s : String)
   | User (e : ue)
@@ -335,6 +336,7 @@ open Error
 def Error.print : Error UE → String
   | Exit => "Exit"
   | Unreachable => "Unreachable"
+  | InfiniteNondeterminisim => "Infinite Nondeterminisim"
   | OutOfMemoryRange n => s!"{n} Out of Memory Range"
   | Assertion s => s!"Assertion failed: {s}"
   | User _ => "Uncaught user exception"
