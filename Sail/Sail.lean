@@ -406,8 +406,8 @@ structure Mem_request (n : Nat) (nt : Nat) (addr_size : Nat) (addr_space : Type)
   access_kind : mem_acc
   address : BitVec addr_size
   address_space : addr_space
-  size : {k : Nat // k = n}
-  num_tag : {k : Nat // k = nt}
+  size : Nat
+  num_tag : Nat
 
 end ConcurrencyInterfaceV2
 
@@ -686,8 +686,8 @@ def sail_mem_request_to_archsem (mem_req : Mem_request size num_tag Arch.addr_si
     { accessKind := mem_req.access_kind
     , address := mem_req.address
     , addressSpace := mem_req.address_space
-    , size := mem_req.size
-    , numTag := mem_req.num_tag }
+    , size := size
+    , numTag := num_tag }
 
 @[simp_sail]
 def sail_mem_read [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) :
@@ -696,7 +696,6 @@ def sail_mem_read [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_sp
   /- CR clang: there must be a cleaner way to write this -/
   have h : (req.size = n) ∧ (req.numTag = nt) := by
     simp [req, sail_mem_request_to_archsem]
-    simp [mem_req.size.property, mem_req.num_tag.property]
   FreeM.impure (.Ok (InstructionEffect.memRead req))
     (FreeM.pure ∘ Result.map (fun (bytes,tags) =>
       (bitvec_to_vecbytes (And.left h ▸ bytes), bitvec_to_vecbool (And.right h ▸ tags))))
@@ -707,7 +706,6 @@ def sail_mem_write [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_s
   let req := sail_mem_request_to_archsem mem_req
   have h : (req.size = n) ∧ (req.numTag = nt) := by
     simp [req, sail_mem_request_to_archsem]
-    simp [mem_req.size.property, mem_req.num_tag.property]
   FreeM.impure (.Ok (InstructionEffect.memWrite req
     (vecbytes_to_bitvec (And.left h ▸ valueBytes)) (vecbool_to_bitvec (And.right h ▸ tags))))
     (fun | .Ok () => .pure (.Ok .none) | .Err e => .pure (.Err e))
