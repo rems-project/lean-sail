@@ -51,7 +51,7 @@ theorem toNat_lt_toNat {a b : Int} (hb : 0 < b) : Int.toNat a < Int.toNat b ↔ 
   have := range.step_pos
   loop init range.start (by simp)
 
-instance : ForIn' m IntRange Int inferInstance where
+instance [Monad m] : ForIn' m IntRange Int inferInstance where
   forIn' := IntRange.forIn'
 
 -- No separate `ForIn` instance is required because it can be derived from `ForIn'`.
@@ -77,7 +77,7 @@ instance : ForIn' m IntRange Int inferInstance where
   have := range.step_pos
   loop range.start
 
-instance : ForM m IntRange Int where
+instance [Monad m] : ForM m IntRange Int where
   forM := IntRange.forM
 
 syntax:max "[" withoutPosition(":" term) "]i" : term
