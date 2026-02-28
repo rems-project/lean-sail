@@ -3,6 +3,12 @@ import Sail.Attr
 import Std.Data.ExtDHashMap
 import Std.Data.ExtHashMap
 
+/-
+This notation, unlike the default `++` notation, in not elaborated as a `binop`,
+which leads to Lean inserting bad coercions.
+-/
+infixl:65 " +++ "  => HAppend.hAppend
+
 def String.takeStr (s : String) (n : Nat) : String :=
   s.take n |>.toString
 
