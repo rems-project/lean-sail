@@ -1,5 +1,6 @@
 import Sail.Attr
 import Sail.ArchSem
+import Sail.ConcurrencyInterfaceV1
 
 import Std.Data.ExtDHashMap
 import Std.Data.ExtHashMap
@@ -133,16 +134,14 @@ def ExceptM.run (m : ExceptM α α) : α :=
     | .error e => e
     | .ok e => e
 
-namespace Sail
+namespace Sail.ConcurrencyInterfaceV1
 
 open PreSail
 
-/-
-variable {Register : Type} {RegisterType : Register → Type} [DecidableEq Regile Register]
--/
+variable {Register : Type} {RegisterType : Register → Type} [DecidableEq Register] [Hashable Register]
 
-/-
-def main_of_sail_main (initialState : SequentialState RegisterType c) (main : Unit → PreSailM ue Unit) : IO UInt32 := do
+def main_of_sail_main (initialState : SequentialState RegisterType trivialChoiceSource)
+    (main : Unit → PreSailM RegisterType trivialChoiceSource ue Unit) : IO UInt32 := do
   let res := main () |>.run initialState
   match res with
   | .ok _ s => do
@@ -154,9 +153,8 @@ def main_of_sail_main (initialState : SequentialState RegisterType c) (main : Un
       IO.print m
     IO.eprintln s!"Error while running the sail program!: {e.print}"
     return 1
--/
 
-end Sail
+end Sail.ConcurrencyInterfaceV1
 
 def whileFuelM {α} [Monad m] (fuel : Nat) (cond : α → m Bool) (init : α) (f : α → m α)  :=
   let rec go x n := do

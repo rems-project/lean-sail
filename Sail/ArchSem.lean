@@ -1,6 +1,6 @@
 import Sail.Common
 
-namespace ArchSem
+namespace Sail.ArchSem
 
 open Sail (Result)
 
@@ -19,7 +19,7 @@ instance : Monad (FreeM Eff effRet) where
 
 
 /- CR clang: I would like to use lean naming convention but this conflicts with sail. -/
-/- CR clang: previously in `namespace Sail.ConcurrencyInterfaceV2` -/
+/- CR clang: previously in `namespace Sail.ArchSem` -/
 /- CR clang: Add some comments explaining the fields of Arch. -/
 class Arch where
   addr_size : Nat
@@ -105,13 +105,10 @@ def InstructionEffect.ret : InstructionEffect → Type
   | .returnExecption => Unit
   | .printMessage _ => Unit
 
-end ArchSem
-
 /-
  - CR clang: leave commend explaining difference between sail and presail,
  - maybe namespaces generally
  -/
-namespace Sail.ConcurrencyInterfaceV2
 
 /- CR clang: rename n, nt -/
 structure Mem_request (n : Nat) (nt : Nat) (addr_size : Nat) (addr_space : Type) (mem_acc : Type) where
@@ -121,21 +118,33 @@ structure Mem_request (n : Nat) (nt : Nat) (addr_size : Nat) (addr_space : Type)
   size : Nat
   num_tag : Nat
 
-end Sail.ConcurrencyInterfaceV2
+/- CR clang: give ue a more descriptive var name 'userError'. -/
+abbrev PreSailM (ue : Type) := FreeM (Result InstructionEffect (Sail.Error ue)) (fun | .Ok eff => eff.ret | .Err _ => Empty)
 
-namespace PreSail.ConcurrencyInterfaceV2
+abbrev PreSailME ue exception := FreeM (Result (Result InstructionEffect (Sail.Error ue)) exception)
+  (fun | .Ok (.Ok eff) => eff.ret | .Ok (.Err _) => Empty | _ => Empty)
 
+instance: MonadExcept ue (PreSailME ue α) where
+  throw e := .impure (.Ok (.Err (.User e))) Empty.elim
+  tryCatch eff h :=
+    let rec tryCatch eff h :=
+      match eff with
+        | .pure v => .pure v
+        | .impure (.Ok (.Err (.User err))) _cont => h err
+        | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
+    tryCatch eff h
+
+namespace PreSail
+
+open _root_.Sail (Result)
 open ArchSem
-open Sail.ConcurrencyInterfaceV2
-open Sail (Result)
+open Sail.ArchSem
 
 variable [Arch]
+
 inductive RegisterRef : Type → Type where
   | Reg (r : Arch.register) : RegisterRef (Arch.register_type r)
 export RegisterRef (Reg)
-
-/- CR clang: give ue a more descriptive var name 'userError'. -/
-abbrev PreSailM (ue : Type) := FreeM (Result InstructionEffect (Sail.Error ue)) (fun | .Ok eff => eff.ret | .Err _ => Empty)
 
 @[simp_sail]
 def sailTryCatch (e : PreSailM ue α) (h : ue → PreSailM ue α) : PreSailM ue α :=
@@ -308,19 +317,6 @@ def print_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM ue Unit
 def print_endline_effect (str : String) : PreSailM ue Unit :=
   print_effect s!"{str}\n"
 
-abbrev PreSailME ue exception := FreeM (Result (Result InstructionEffect (Sail.Error ue)) exception)
-  (fun | .Ok (.Ok eff) => eff.ret | .Ok (.Err _) => Empty | _ => Empty)
-
-instance: MonadExcept ue (PreSailME ue α) where
-  throw e := .impure (.Ok (.Err (.User e))) Empty.elim
-  tryCatch eff h :=
-    let rec tryCatch eff h :=
-      match eff with
-        | .pure v => .pure v
-        | .impure (.Ok (.Err (.User err))) _cont => h err
-        | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
-    tryCatch eff h
-
 /-
  - CR clang: this is here for compatability with Out/Specialization.lean in the generated isa spec.
  - I've just duplicated the above tryCatch func.
@@ -347,4 +343,4 @@ instance : MonadLift (PreSailM ue) (PreSailME ue ε) where
       | .impure eff cont => .impure (.Ok eff) (fun v => lift (cont (cast (by symm ; split <;> rfl) v)))
     lift m
 
-end PreSail.ConcurrencyInterfaceV2
+end Sail.ArchSem.PreSail

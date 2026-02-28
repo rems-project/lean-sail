@@ -93,9 +93,8 @@ structure Mem_write_request
 
 end Sail.ConcurrencyInterfaceV1
 
-namespace PreSail.ConcurrencyInterfaceV1
+namespace Sail.ConcurrencyInterfaceV1
 
-open Sail.ConcurrencyInterfaceV1
 open Sail (Result)
 
 /-
@@ -112,12 +111,18 @@ structure SequentialState (RegisterType : Register → Type) (c : ChoiceSource) 
   cycleCount : Nat -- Part of the concurrency interface. See `{get_}cycle_count`
   sailOutput : Array String -- TODO: be able to use the IO monad to run
 
+abbrev PreSailM (RegisterType : Register → Type) (c : ChoiceSource) (ue: Type) :=
+  EStateM (Sail.Error ue) (SequentialState RegisterType c)
+
+variable (RegisterType) in
+abbrev PreSailME c ue α := ExceptT (Sail.Error ue ⊕ α) (PreSailM RegisterType c ue)
+
+namespace PreSail
+
 inductive RegisterRef (RegisterType : Register → Type) : Type → Type where
   | Reg (r : Register) : RegisterRef _ (RegisterType r)
 export RegisterRef (Reg)
 
-abbrev PreSailM (RegisterType : Register → Type) (c : ChoiceSource) (ue: Type) :=
-  EStateM (Sail.Error ue) (SequentialState RegisterType c)
 
 @[simp_sail]
 def sailTryCatch (e : PreSailM RegisterType c ue α) (h : ue → PreSailM RegisterType c ue α) :
@@ -313,9 +318,6 @@ section SailME
 
 variable {Register : Type} {RT : Register → Type} [DecidableEq Register] [Hashable Register]
 
-variable (RT) in
-abbrev PreSailME c ue α := ExceptT (Sail.Error ue ⊕ α) (PreSailM RT c ue)
-
 instance: MonadExceptOf (Sail.Error ue) (PreSailME RT c ue α) where
   throw e := MonadExcept.throw (.inl e)
   tryCatch x h := MonadExcept.tryCatch x (fun e => match e with | .inl e => h e | .inr _ => MonadExcept.throw e)
@@ -345,4 +347,4 @@ instance : Inhabited (SequentialState RT trivialChoiceSource) where
 end SailME
 
 
-end PreSail.ConcurrencyInterfaceV1
+end Sail.ConcurrencyInterfaceV1.PreSail

@@ -6,6 +6,12 @@ which leads to Lean inserting bad coercions.
 -/
 infixl:65 " +++ "  => HAppend.hAppend
 
+def String.takeStr (s : String) (n : Nat) : String :=
+  s.take n |>.toString
+
+def String.dropStr (s : String) (n : Nat) : String :=
+  s.drop n |>.toString
+
 namespace Sail
 
 namespace BitVec
