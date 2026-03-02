@@ -165,6 +165,10 @@ instance: MonadExceptOf (Sail.Error userError) (PreSailM userError) where
     | .impure (.Ok eff) cont => .impure (.Ok eff) (fun v => tryCatch (cont v) h)
   tryCatch eff h
 
+def unwrapValue : (x : PreSailM ue α) → match x with | FreeM.pure _ => α | FreeM.impure _ _ => Unit
+  | .pure a => a
+  | .impure _ _ => ()
+
 def choose_fin (n : Nat) : PreSailM ue (Fin n) :=
   FreeM.impure (Result.Ok (InstructionEffect.choice n)) FreeM.pure
 
