@@ -27,6 +27,8 @@ class Arch where
   CHERI : Bool
   cap_size_log : Nat
   register : Type
+  [register_deq : DecidableEq register]
+  [register_hashable : Hashable register]
   register_type : register → Type
   mem_acc : Type
   mem_acc_is_explicit : mem_acc -> Bool
@@ -47,6 +49,8 @@ class Arch where
   exn : Type
   sys_reg_id : Type
 
+instance [Arch] : DecidableEq Arch.register := Arch.register_deq
+instance [Arch] : Hashable Arch.register := Arch.register_hashable
 variable [Arch]
 
 /- CR clang: leave a comment here explaining different MemRequest structures. -/
@@ -188,18 +192,7 @@ def undefined_bitvector (n : Nat) : PreSailM ue (BitVec n) := do
 
 def internal_pick {α : Type} (l : List α) : PreSailM ue α := do
   if l.isEmpty then
-    /-
-     - CR clang for thibaut: We have discussed this before, but when I came to make
-     - a change here, I realised that I still dont really understand. You told me
-     - that I should not throw Unreachable here. But then I'm not really sure what
-     - I can do? I need to produce a `PreSailM ue α`, but I have nowhere to get an α
-     - from, so I kind of need to use an Empty.elim. And I can only do that if I have
-     - an empty which I can only get by throwing some kind of error?
-     -
-     - The old state monad implementation was throwing unreachable:
-     - https://github.com/rems-project/lean-sail/blob/aed25177482c50db6a7d8da8144388cc69da10f2/Sail/Sail.lean#L518
-     -/
-    .impure (.Err .Unreachable) Empty.elim
+    .impure (.Ok (InstructionEffect.choice 0)) (fun (n : Fin 0) => nomatch n)
   else
     return l.get (← choose_fin l.length)
 
