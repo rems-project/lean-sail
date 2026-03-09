@@ -20,15 +20,15 @@ class ConcurrencyInterfaceV2.Arch where
   cap_size_log : Nat
 
   mem_acc : Type
-  mem_acc_is_explicit : mem_acc -> Bool
-  mem_acc_is_ifetch : mem_acc -> Bool
-  mem_acc_is_ttw : mem_acc -> Bool
-  mem_acc_is_relaxed : mem_acc -> Bool
-  mem_acc_is_rel_acq_rcpc : mem_acc -> Bool
-  mem_acc_is_rel_acq_rcsc : mem_acc -> Bool
-  mem_acc_is_standalone : mem_acc -> Bool
-  mem_acc_is_exclusive : mem_acc -> Bool
-  mem_acc_is_atomic_rmw : mem_acc -> Bool
+  mem_acc_is_explicit : mem_acc → Bool
+  mem_acc_is_ifetch : mem_acc → Bool
+  mem_acc_is_ttw : mem_acc → Bool
+  mem_acc_is_relaxed : mem_acc → Bool
+  mem_acc_is_rel_acq_rcpc : mem_acc → Bool
+  mem_acc_is_rel_acq_rcsc : mem_acc → Bool
+  mem_acc_is_standalone : mem_acc → Bool
+  mem_acc_is_exclusive : mem_acc → Bool
+  mem_acc_is_atomic_rmw : mem_acc → Bool
 
   trans_start : Type
   trans_end : Type
