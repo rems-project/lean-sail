@@ -18,8 +18,6 @@ instance : Monad (FreeM Eff effRet) where
   bind := FreeM.bind
 
 
-/- CR clang: I would like to use lean naming convention but this conflicts with sail. -/
-/- CR clang: previously in `namespace Sail.ArchSem` -/
 /- CR clang: Add some comments explaining the fields of Arch. -/
 class Arch where
   addr_size : Nat
@@ -223,50 +221,6 @@ def reg_deref (reg_ref : RegisterRef α) : PreSailM ue α :=
 @[simp_sail]
 def assert (p : Bool) (s : String) : PreSailM ue Unit :=
   if p then .pure () else .impure (.Err (.Assertion s)) Empty.elim
-
--- CR clang: put these utility functions somewhere better, maybe Common.lean
--- CR clang: comment the edianness of these to be clear. I'm guessing in both its LSB first?
-def vecbytes_to_bitvec (vec : Vector (BitVec 8) n) : BitVec (8 * n) :=
-  vec.foldl
-    (fun (i, acc) x => (i+1, acc.or ((x.zeroExtend (8*n)).shiftLeft (i*8))) )
-    (0, BitVec.zero (8 * n))
-  |> Prod.snd
-def bitvec_to_vecbytes (bitvec : BitVec (8 * n)) : Vector (BitVec 8) n :=
-  Vector.ofFn (fun i => Sail.BitVec.slice bitvec (8 * i) 8)
-def vecbool_to_bitvec (vec : Vector Bool n) : BitVec n :=
-  vec.foldl
-    (fun (i, acc) b => (i+1, acc.or (((BitVec.ofBool b).zeroExtend n).shiftLeft i) ))
-    (0, BitVec.zero n)
-  |> Prod.snd
-def bitvec_to_vecbool (bitvec : BitVec n) : Vector Bool n :=
-  Vector.ofFn (fun i => BitVec.getLsb bitvec i)
-
--- CR clang: whats the lean convention of where to put tests?
-namespace VectorConversionTests
-
-def valueBytes : Vector (BitVec 8) 8 := ⟨#[
-  BitVec.ofNat 8 0x1,
-  BitVec.ofNat 8 0x2,
-  BitVec.ofNat 8 0x3,
-  BitVec.ofNat 8 0x4,
-  BitVec.ofNat 8 0x5,
-  BitVec.ofNat 8 0x6,
-  BitVec.ofNat 8 0x7,
-  BitVec.ofNat 8 0x8,
-  ], rfl⟩
-def valueVec : BitVec (8*8) := vecbytes_to_bitvec valueBytes
-#guard valueVec.toHex == "0807060504030201"
-#guard (bitvec_to_vecbytes valueVec) == valueBytes
-
-def myVecBool : Vector Bool 8 := ⟨#[
-  true, true, false, false, -- 0x3
-  false, false, false, true -- 0x8
-  ], rfl⟩
-def myBitVec : BitVec 8 := vecbool_to_bitvec myVecBool
-#guard myBitVec.toHex == "83"
-#guard (bitvec_to_vecbool myBitVec) == myVecBool
-
-end VectorConversionTests
 
 
 def sail_mem_request_to_archsem (mem_req : Mem_request size num_tag Arch.addr_size Arch.addr_space Arch.mem_acc) : ArchSem.MemRequest :=

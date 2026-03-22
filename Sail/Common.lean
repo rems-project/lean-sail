@@ -123,6 +123,21 @@ instance (priority := low) : Coe (BitVec (1 * n)) (BitVec n) where
 
 end BitVec
 
+-- These byte conversion functions use little endian vectors.
+def vecbytes_to_bitvec (vec : Vector (BitVec 8) n) : BitVec (8 * n) :=
+  vec.foldl
+    (fun (i, acc) x => (i+1, acc.or ((x.zeroExtend (8*n)).shiftLeft (i*8))) )
+    (0, BitVec.zero (8 * n))
+  |> Prod.snd
+def bitvec_to_vecbytes (bitvec : BitVec (8 * n)) : Vector (BitVec 8) n :=
+  Vector.ofFn (fun i => Sail.BitVec.slice bitvec (8 * i) 8)
+def vecbool_to_bitvec (vec : Vector Bool n) : BitVec n :=
+  vec.foldl
+    (fun (i, acc) b => (i+1, acc.or (((BitVec.ofBool b).zeroExtend n).shiftLeft i) ))
+    (0, BitVec.zero n)
+  |> Prod.snd
+def bitvec_to_vecbool (bitvec : BitVec n) : Vector Bool n :=
+  Vector.ofFn (fun i => BitVec.getLsb bitvec i)
 
 def charToHex (c : Char) : BitVec 4 :=
   match c.toLower with
