@@ -281,7 +281,6 @@ instance : HShiftLeft (BitVec w) Int (BitVec w) where
 instance : HShiftRight (BitVec w) Int (BitVec w) where
   hShiftRight b i := b <<< (- i)
 
-/- CR clang: Previously in `namespace Sail` -/
 inductive Primitive where
   | bool
   | bit
@@ -317,7 +316,7 @@ def Error.print : Error UE → String
   | Assertion s => s!"Assertion failed: {s}"
   | User _ => "Uncaught user exception"
 
-/- CR clang: It would be nice if we could use lean4's Except type. -/
+/- TODO: Use Except type from the lean4 standard library. -/
 inductive Result (α : Type) (β : Type) where
   | Ok (_ : α)
   | Err (_ : β)

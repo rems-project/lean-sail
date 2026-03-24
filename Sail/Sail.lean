@@ -2,131 +2,19 @@ import Sail.Attr
 import Sail.ArchSem
 import Sail.ConcurrencyInterfaceV1
 
-import Std.Data.ExtDHashMap
-import Std.Data.ExtHashMap
-
 namespace Sail
 
-
-section PreSailTypes
-
-open ArchSem
-
-/-
-class ConcurrencyInterfaceV2.Arch where
-  addr_size : Nat
-  addr_space : Type
-  CHERI : Bool
-  cap_size_log : Nat
-
-  mem_acc : Type
-  mem_acc_is_explicit : mem_acc → Bool
-  mem_acc_is_ifetch : mem_acc → Bool
-  mem_acc_is_ttw : mem_acc → Bool
-  mem_acc_is_relaxed : mem_acc → Bool
-  mem_acc_is_rel_acq_rcpc : mem_acc → Bool
-  mem_acc_is_rel_acq_rcsc : mem_acc → Bool
-  mem_acc_is_standalone : mem_acc → Bool
-  mem_acc_is_exclusive : mem_acc → Bool
-  mem_acc_is_atomic_rmw : mem_acc → Bool
-
-  trans_start : Type
-  trans_end : Type
-  abort : Type
-  barrier : Type
-  cache_op : Type
-  tlbi : Type
-  exn : Type
-  sys_reg_id : Type
--/
-
 /- The Units are placeholders for a future implementation of the state monad some Sail functions use. -/
-
-end PreSailTypes
-
 def print_int : String → Int → Unit := fun _ _ => ()
-
 def prerr_int : String → Int → Unit := fun _ _ => ()
-
 def prerr_bits: String → BitVec n → Unit := fun _ _ => ()
-
 def print_endline : String → Unit := fun _  => ()
-
 def prerr_endline : String → Unit := fun _ => ()
-
 def print : String → Unit := fun _ => ()
-
 def prerr : String → Unit := fun _ => ()
 
 end Sail
 
-namespace PreSail
-
-open Sail
-open ArchSem
-
-section SailME
-
-open ArchSem
-variable [Arch]
-
-/-
-variable {Register : Type} {RT : Register → Type} [DecidableEq Register] [Hashable Register]
-variable (RT) in
-abbrev PreSailME ue α := ExceptT (Error ue ⊕ α) (PreSailM RT c ue)
--/
-
-
-/-
-instance: MonadExceptOf (Error ue) (PreSailME RT c ue α) where
-  throw e := MonadExcept.throw (.inl e)
-  tryCatch x h := MonadExcept.tryCatch x (fun e => match e with | .inl e => h e | .inr _ => MonadExcept.throw e)
--/
-
-
-/- CR clang: so this only throws and catches `Error ue`... -/
-/-
-instance: MonadExceptOf (Error ue) (PreSailME ue α) where
-  throw e := .impure (.Ok (.Err e)) Empty.elim
-  tryCatch eff h :=
-    let rec tryCatch eff h :=
-      match eff with
-        | .pure v => .pure v
-        | .impure (.Ok (.Err e)) _cont => h e
-        | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
-    tryCatch eff h
--/
-
-/-
-def PreSailME.map_error (e : PreSailME ue ε α) (f : ε → ε') : PreSailME ue ε' α :=
-  match e with
-  | .pure v => .pure v
-  | .impure (.Err e) cont => .impure (.Err (f e)) Empty.elim
-  | .impure (.Ok eff) cont => .impure (.Ok eff)
-    (fun v => PreSailME.map_error (cont (cast (by ) v)) f)
-
-def _root_.ExceptT.map_error [Monad m] (e : ExceptT ε m α) (f : ε → ε') : ExceptT ε' m α :=
-  ExceptT.mk <| do
-    match ← e.run with
-    | .ok x => pure $ .ok x
-    | .error e => pure $ .error (f e)
-
-instance [∀ x, CoeT α x α'] :
-    CoeT (PreSailME ue α β) e (PreSailME ue α' β) where
-  coe := e.map_error (fun x => match x with | .inl e => .inl e | .inr e => .inr e)
--/
-
-
-/-
-instance : Inhabited (PreSail.SequentialState RT trivialChoiceSource) where
-  default := ⟨default, (), default, default, default, default⟩
--/
-
-end SailME
-
-end PreSail
-
-/- CR clang: is this even used? -/
 abbrev ExceptM α := ExceptT α Id
 
 def ExceptM.run (m : ExceptM α α) : α :=

@@ -1,9 +1,97 @@
 import Sail.Common
 
-namespace Sail.ArchSem
-
 open Sail (Result)
 
+namespace Sail.ArchSem
+
+/-- Architecture parameters known to ArchSem. -/
+class Arch where
+  /-- Number of bits used to index an address. -/
+  addr_size : Nat
+  /-- CR clang for thibaut: help me comment this. -/
+  addr_space : Type
+  CHERI : Bool
+  /-- CR clang for thibaut: help me comment this. -/
+  cap_size_log : Nat
+  /-- Architecture register types. -/
+  register : Type
+  [register_deq : DecidableEq register]
+  [register_hashable : Hashable register]
+  register_type : register → Type
+  /-- Memory access classes to be used in MemRequest structure. -/
+  mem_acc : Type
+  mem_acc_is_explicit : mem_acc → Bool
+  mem_acc_is_ifetch : mem_acc → Bool
+  mem_acc_is_ttw : mem_acc → Bool
+  mem_acc_is_relaxed : mem_acc → Bool
+  mem_acc_is_rel_acq_rcpc : mem_acc → Bool
+  mem_acc_is_rel_acq_rcsc : mem_acc → Bool
+  mem_acc_is_rel_acq (acc : mem_acc) : Bool :=
+    mem_acc_is_rel_acq_rcpc acc || mem_acc_is_rel_acq_rcsc acc
+  mem_acc_is_standalone : mem_acc → Bool
+  mem_acc_is_exclusive : mem_acc → Bool
+  mem_acc_is_atomic_rmw : mem_acc → Bool
+  /-- Type associated with translation start ISA effect. -/
+  trans_start : Type
+  /-- Type associated with translation end ISA effect. -/
+  trans_end : Type
+  /-- The type thrown on physical memory access abort. -/
+  abort : Type
+  /-- Barrier types. -/
+  barrier : Type
+  /-- Cache operations for data and instruction caches. -/
+  cache_op : Type
+  /- Translation lookaside buffer instructions. -/
+  tlbi : Type
+  /-- Type thrown on fault or exception. -/
+  exn : Type
+  /-- CR clang for thibaut: help me comment this. -/
+  sys_reg_id : Type
+
+instance [Arch] : DecidableEq Arch.register := Arch.register_deq
+instance [Arch] : Hashable Arch.register := Arch.register_hashable
+variable [Arch]
+
+/-- ArchSem's external memory request type used in ISA effects. -/
+structure MemRequest where
+  accessKind : Arch.mem_acc
+  address : BitVec Arch.addr_size
+  addressSpace : Arch.addr_space
+  size : Nat
+  numTag : Nat
+
+/--
+This reflects Sail's Mem_request type so it can be used by the sail-lean
+backend. It contains redundant `_size` and `_numTags` due to limitations
+in the sail typesystem.
+
+To prevent from exposing this redundancy to ArchSem users, the `Mem_request`
+type is converted to `MemRequst` before reaching the effect interface.
+
+CR clang: I dont fully understand why this is a limitation in sail.
+-/
+structure Mem_request (_size : Nat) (_numTags : Nat)
+    (addr_size : Nat) (addr_space : Type) (mem_acc : Type) where
+  access_kind : mem_acc
+  address : BitVec addr_size
+  address_space : addr_space
+  size : Nat
+  num_tag : Nat
+
+/-- Convert the sail-internal memory request type to the ArchSem-external type. -/
+def Mem_request.toArchSem
+    {size numTag: Nat}
+    (memReq : Mem_request size numTag Arch.addr_size Arch.addr_space Arch.mem_acc)
+    : ArchSem.MemRequest :=
+  { accessKind := memReq.access_kind
+  , address := memReq.address
+  , addressSpace := memReq.address_space
+  , size := size
+  , numTag := numTag }
+
+/--
+CR clang: TODO comment on why I cant use the CS-lib style free monad.
+-/
 inductive FreeM.{u, v, w} (Eff : Type v) (eff_ret : Eff → Type u) (α : Type w) where
   | pure (a : α) : FreeM Eff eff_ret α
   | impure (call : Eff) (cont : eff_ret call → FreeM Eff eff_ret α) : FreeM Eff eff_ret α
@@ -17,57 +105,10 @@ instance : Monad (FreeM Eff effRet) where
   pure x := FreeM.pure x
   bind := FreeM.bind
 
-
-/- CR clang: Add some comments explaining the fields of Arch. -/
-class Arch where
-  addr_size : Nat
-  addr_space : Type
-  CHERI : Bool
-  cap_size_log : Nat
-  register : Type
-  [register_deq : DecidableEq register]
-  [register_hashable : Hashable register]
-  register_type : register → Type
-  mem_acc : Type
-  mem_acc_is_explicit : mem_acc → Bool
-  mem_acc_is_ifetch : mem_acc → Bool
-  mem_acc_is_ttw : mem_acc → Bool
-  mem_acc_is_relaxed : mem_acc → Bool
-  mem_acc_is_rel_acq_rcpc : mem_acc → Bool
-  mem_acc_is_rel_acq_rcsc : mem_acc → Bool
-  mem_acc_is_rel_acq (acc : mem_acc) : Bool :=
-    mem_acc_is_rel_acq_rcpc acc || mem_acc_is_rel_acq_rcsc acc
-  mem_acc_is_standalone : mem_acc → Bool
-  mem_acc_is_exclusive : mem_acc → Bool
-  mem_acc_is_atomic_rmw : mem_acc → Bool
-  trans_start : Type
-  trans_end : Type
-  abort : Type
-  barrier : Type
-  cache_op : Type
-  tlbi : Type
-  exn : Type
-  sys_reg_id : Type
-
-instance [Arch] : DecidableEq Arch.register := Arch.register_deq
-instance [Arch] : Hashable Arch.register := Arch.register_hashable
-variable [Arch]
-
-/- CR clang: leave a comment here explaining different MemRequest structures. -/
-structure MemRequest where
-  accessKind : Arch.mem_acc
-  address : BitVec Arch.addr_size
-  addressSpace : Arch.addr_space
-  size : Nat
-  numTag : Nat
-
-/- CR clang: See rocq-lean effects in ArchSem/Interface.v `outcome` -/
-/- CR clang: After discussion with Thibaut on Mon 26th Jan: We are going to make
-this inductive type take an `Error : type` argument. Then this will be instantiated
-something like :
-  PreSailM : FrMon (outcome arch (generic_error + user_error))
-  PreArchM : FreeMon (outcome (generic_error))
-  PreSailME : Free Mon(outcome (generic error + user error + A:type))
+/--
+The ArchSem interface ISA Effect type.
+Represents primitive operations an architecture instruction can perform.
+ISA instructions are a free monad of InstructionEffects.
 -/
 inductive InstructionEffect where
   | regRead (reg : Arch.register) (accessType : Option Arch.sys_reg_id)
@@ -78,7 +119,6 @@ inductive InstructionEffect where
   | barrier (barrier : Arch.barrier)
   | cacheOp (op : Arch.cache_op)
   | tlbOp (op : Arch.tlbi)
-  /- | choice (primitive : Primitive) -/
   | choice (n : Nat)
   | clockCycle
   | getCycleCount
@@ -86,10 +126,8 @@ inductive InstructionEffect where
   | translationEnd (translationEnd : Arch.trans_end)
   | archException (exception : Arch.exn)
   | returnExecption
-  /- CR clang: Maybe split this out into different types: -/
   | printMessage (msg : String)
 
-/- CR clang: namespcae this -/
 def InstructionEffect.ret : InstructionEffect → Type
   | .regRead reg _ => Arch.register_type reg
   | .regWrite _ _ _ => Unit
@@ -99,7 +137,6 @@ def InstructionEffect.ret : InstructionEffect → Type
   | .barrier _ => Unit
   | .cacheOp _ => Unit
   | .tlbOp _ => Unit
-  /- | .choice primitive => primitive.reflect -/
   | .choice n => Fin n
   | .clockCycle => Unit
   | .getCycleCount => Nat
@@ -110,23 +147,38 @@ def InstructionEffect.ret : InstructionEffect → Type
   | .printMessage _ => Unit
 
 /-
- - CR clang: leave commend explaining difference between sail and presail,
- - maybe namespaces generally
- -/
+CR clang: leave comment explaining difference between sail and presail,
+maybe namespaces generally.
+- PreSail
+  - Things used in the backend but not exposed.
+- Sail
+  - Things used in the backend and also exposed.
+- Sail.ArchSem
+  - Formerly ConcurrencyInterfaceV2.
+- Sail.ConcurrencyInterfaceV1
+-/
 
-/- CR clang: rename n, nt -/
-structure Mem_request (n : Nat) (nt : Nat) (addr_size : Nat) (addr_space : Type) (mem_acc : Type) where
-  access_kind : mem_acc
-  address : BitVec addr_size
-  address_space : addr_space
-  size : Nat
-  num_tag : Nat
+/-
+CR clang: explain error types.
+- userError (passedto PreSailM) (Unit in sail-tiny-arm)
+- exception (passed to PreSailME)
+- Sail.Error
+  - sail-internal error, assertion, infinite-nondeterminisim, etc.
+-/
 
-/- CR clang: give ue a more descriptive var name 'userError'. -/
-abbrev PreSailM (ue : Type) := FreeM (Result InstructionEffect (Sail.Error ue)) (fun | .Ok eff => eff.ret | .Err _ => Empty)
+/--
+The lean-backend fills in the userError type to define `SailM`, the ISA
+instruction monad.
+-/
+abbrev PreSailM (userError : Type) :=
+  FreeM
+    (Result InstructionEffect (Sail.Error userError))
+    (fun | .Ok eff => eff.ret | .Err _ => Empty)
 
-abbrev PreSailME ue exception := FreeM (Result (Result InstructionEffect (Sail.Error ue)) exception)
-  (fun | .Ok (.Ok eff) => eff.ret | .Ok (.Err _) => Empty | _ => Empty)
+abbrev PreSailME ue exception :=
+  FreeM
+    (Result (Result InstructionEffect (Sail.Error ue)) exception)
+    (fun | .Ok (.Ok eff) => eff.ret | .Ok (.Err _) => Empty | _ => Empty)
 
 instance: MonadExcept ue (PreSailME ue α) where
   throw e := .impure (.Ok (.Err (.User e))) Empty.elim
@@ -139,10 +191,6 @@ instance: MonadExcept ue (PreSailME ue α) where
     tryCatch eff h
 
 namespace PreSail
-
-open _root_.Sail (Result)
-open ArchSem
-open Sail.ArchSem
 
 variable [Arch]
 
@@ -222,19 +270,10 @@ def reg_deref (reg_ref : RegisterRef α) : PreSailM ue α :=
 def assert (p : Bool) (s : String) : PreSailM ue Unit :=
   if p then .pure () else .impure (.Err (.Assertion s)) Empty.elim
 
-
-def sail_mem_request_to_archsem (mem_req : Mem_request size num_tag Arch.addr_size Arch.addr_space Arch.mem_acc) : ArchSem.MemRequest :=
-    { accessKind := mem_req.access_kind
-    , address := mem_req.address
-    , addressSpace := mem_req.address_space
-    , size := size
-    , numTag := num_tag }
-
 @[simp_sail]
-def sail_mem_read [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) :
+def sail_mem_read (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) :
     PreSailM ue (Result ((Vector (BitVec 8) n) × (Vector Bool nt)) Arch.abort) :=
-  let req := sail_mem_request_to_archsem mem_req
-  /- CR clang: there must be a cleaner way to write this -/
+  let req := mem_req.toArchSem
   let resultToSail
       : Result ( BitVec (8*n)         ×  BitVec nt)       Arch.abort
       → Result ((Vector (BitVec 8) n) × (Vector Bool nt)) Arch.abort
@@ -245,11 +284,11 @@ def sail_mem_read [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_sp
   FreeM.impure (.Ok (InstructionEffect.memRead req))
     (FreeM.pure ∘ resultToSail)
 
-/- CR clang: why does this return an option bool. I just set to none always. -/
-def sail_mem_write [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc)
+@[simp_sail]
+def sail_mem_write (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc)
     (valueBytes : Vector (BitVec 8) n) (tagsVector : Vector Bool nt)
     : PreSailM ue (Result (Option Bool) Arch.abort) :=
-  let req := sail_mem_request_to_archsem mem_req
+  let req := mem_req.toArchSem
   let value : BitVec (8*n) := vecbytes_to_bitvec valueBytes
   let tags : BitVec nt := vecbool_to_bitvec tagsVector
   let resultToSail : Result Unit Arch.abort → Result (Option Bool) Arch.abort
@@ -258,36 +297,36 @@ def sail_mem_write [Arch] (mem_req : Mem_request n nt Arch.addr_size Arch.addr_s
     (FreeM.pure ∘ resultToSail)
 
 @[simp_sail]
-def sail_sys_reg_read [Arch] (_id : Arch.sys_reg_id) (r : RegisterRef α) : PreSailM ue α :=
+def sail_sys_reg_read (_id : Arch.sys_reg_id) (r : RegisterRef α) : PreSailM ue α :=
   readRegRef r
 
 @[simp_sail]
-def sail_sys_reg_write [Arch] (_id : Arch.sys_reg_id) (r : RegisterRef α) (v : α) : PreSailM ue Unit :=
+def sail_sys_reg_write (_id : Arch.sys_reg_id) (r : RegisterRef α) (v : α) : PreSailM ue Unit :=
   writeRegRef r v
 
-def sail_mem_address_announce [Arch] (_ann : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) : PreSailM ue Unit :=
+def sail_mem_address_announce (_ann : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) : PreSailM ue Unit :=
   pure ()
 
 @[simp_sail]
-def sail_translation_start [Arch] (_ : Arch.trans_start) : PreSailM ue Unit := pure ()
+def sail_translation_start (_ : Arch.trans_start) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_translation_end [Arch] (_ : Arch.trans_end) : PreSailM ue Unit := pure ()
+def sail_translation_end (_ : Arch.trans_end) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_barrier [Arch] (_ : Arch.barrier) : PreSailM ue Unit := pure ()
+def sail_barrier (_ : Arch.barrier) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_take_exception [Arch] (_ : Arch.exn) : PreSailM ue Unit := pure ()
+def sail_take_exception (_ : Arch.exn) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
 def sail_return_exception (_ : Unit) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_cache_op [Arch] (_ : Arch.cache_op) : PreSailM ue Unit := pure ()
+def sail_cache_op (_ : Arch.cache_op) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
-def sail_tlbi [Arch] (_ : Arch.tlbi) : PreSailM ue Unit := pure ()
+def sail_tlbi (_ : Arch.tlbi) : PreSailM ue Unit := pure ()
 
 @[simp_sail]
 def cycle_count (_ : Unit) : PreSailM ue Unit :=
@@ -309,15 +348,9 @@ def print_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM ue Unit
 def print_endline_effect (str : String) : PreSailM ue Unit :=
   print_effect s!"{str}\n"
 
-/-
- - CR clang: this is here for compatability with Out/Specialization.lean in the generated isa spec.
- - I've just duplicated the above tryCatch func.
- -/
-def sailTryCatchE (eff : PreSailME ue e α) (h : ue → PreSailME ue e α) : PreSailME ue e α :=
-  match eff with
-    | .pure v => .pure v
-    | .impure (.Ok (.Err (.User err))) _cont => h err
-    | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
+def sailTryCatchE (eff : PreSailME ue e α) (h : ue → PreSailME ue e α)
+    : PreSailME ue e α :=
+  tryCatch eff h
 
 def PreSailME.run : PreSailME ue α α → PreSailM ue α
  | .pure v => .pure v

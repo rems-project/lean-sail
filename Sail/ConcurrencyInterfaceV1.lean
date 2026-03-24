@@ -6,7 +6,6 @@ import Std.Data.ExtHashMap
 
 namespace Sail.ConcurrencyInterfaceV1
 
-/- CR clang :choice source stuff moved from `Sail` into `Sail.ConcurrencyInterfaceV1` -/
 structure ChoiceSource where
   (α : Type)
   (nextState : Sail.Primitive → α → α)
@@ -97,10 +96,6 @@ namespace Sail.ConcurrencyInterfaceV1
 
 open Sail (Result)
 
-/-
- - CR clang: some of the namespaces these live in have changed.
- - e.g. PreSailM used to be in PreSail, but is now interface-specific.
- -/
 variable {Register : Type} {RegisterType : Register → Type} [DecidableEq Register] [Hashable Register]
 
 structure SequentialState (RegisterType : Register → Type) (c : ChoiceSource) where
@@ -345,6 +340,5 @@ instance : Inhabited (SequentialState RT trivialChoiceSource) where
   default := ⟨default, (), default, default, default, default⟩
 
 end SailME
-
 
 end Sail.ConcurrencyInterfaceV1.PreSail
