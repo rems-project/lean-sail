@@ -15,6 +15,13 @@ def prerr : String → Unit := fun _ => ()
 
 end Sail
 
+/-
+The lean backend wants to import this (as of Mar 2026) so I'll
+let it even though its not used any more. TODO: update the backend.
+-/
+namespace PreSail
+end PreSail
+
 abbrev ExceptM α := ExceptT α Id
 
 def ExceptM.run (m : ExceptM α α) : α :=
