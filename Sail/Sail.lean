@@ -883,3 +883,14 @@ macro_rules | `(tactic| decreasing_trivial) => `(tactic|
 -- termination.
 @[wf_preprocess]
 theorem cond_eq_ite (b : Bool) (x y : α) : cond b x y = ite b x y := by cases b <;> rfl
+
+-- Instances for Sigma types, needed to support the Sail Lean backend's existential
+-- type translation where Sail {'n. body} types are represented as Lean Sigma types.
+
+instance instInhabitedSigma {α : Type u} {β : α → Type v} [Inhabited α] [Inhabited (β default)] :
+    Inhabited (Sigma β) :=
+  ⟨⟨default, default⟩⟩
+
+instance instBEqSigma {α : Type u} {β : α → Type v} [DecidableEq α] [∀ a, BEq (β a)] :
+    BEq (Sigma β) where
+  beq s t := if h : s.1 = t.1 then (h ▸ s.2) == t.2 else false
