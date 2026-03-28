@@ -8,10 +8,17 @@ namespace Sail.ArchSem
 class Arch where
   /-- Number of bits used to index an address. -/
   addr_size : Nat
-  /-- CR clang for thibaut: help me comment this. -/
+  /--
+  CR clang: check this is right: §B.2.10 of the reference manual.
+  ARMs memory model has "Memory types and attributes" such as "Device Memory".
+  -/
   addr_space : Type
+  /-- Is this architecture CHERI-enabled. -/
   CHERI : Bool
-  /-- CR clang for thibaut: help me comment this. -/
+  /--
+  The base 2 logarithm of the number of bytes a CHERI tag bit projects.
+  This field is only meaningful if CHERI is set true.
+  -/
   cap_size_log : Nat
   /-- Architecture register types. -/
   register : Type
@@ -45,7 +52,11 @@ class Arch where
   tlbi : Type
   /-- Type thrown on fault or exception. -/
   exn : Type
-  /-- CR clang for thibaut: help me comment this. -/
+  /--
+  CR clang: find this in the ARM reference manual.
+  ARM system registers can be accessed implicitly or explicitly which changes
+  their timing properties? This type enumerates the access types.
+  -/
   sys_reg_id : Type
 
 instance [Arch] : DecidableEq Arch.register := Arch.register_deq
@@ -61,14 +72,11 @@ structure MemRequest where
   numTag : Nat
 
 /--
-This reflects Sail's Mem_request type so it can be used by the sail-lean
-backend. It contains redundant `_size` and `_numTags` due to limitations
-in the sail typesystem.
+This reflects Sail's Mem_request structure, having size and numTags at both
+type and term level. It is used by the sail-generated lean code.
 
 To prevent from exposing this redundancy to ArchSem users, the `Mem_request`
 type is converted to `MemRequst` before reaching the effect interface.
-
-CR clang: I dont fully understand why this is a limitation in sail.
 -/
 structure Mem_request (_size : Nat) (_numTags : Nat)
     (addr_size : Nat) (addr_space : Type) (mem_acc : Type) where
@@ -90,11 +98,14 @@ def Mem_request.toArchSem
   , numTag := numTag }
 
 /--
-CR clang: TODO comment on why I cant use the CS-lib style free monad.
+CR clang: TODO comment on why I dont use the CS-lib style free monad.
+
+Free Monad. Unlike the CS-lib free monad, this one can live in the same
+type universe as its effect return types.
 -/
-inductive FreeM.{u, v, w} (Eff : Type v) (eff_ret : Eff → Type u) (α : Type w) where
-  | pure (a : α) : FreeM Eff eff_ret α
-  | impure (call : Eff) (cont : eff_ret call → FreeM Eff eff_ret α) : FreeM Eff eff_ret α
+inductive FreeM.{u, v, w} (Eff : Type v) (effRet : Eff → Type u) (α : Type w) where
+  | pure (a : α) : FreeM Eff effRet α
+  | impure (call : Eff) (cont : effRet call → FreeM Eff effRet α) : FreeM Eff effRet α
 
 def FreeM.bind (x : FreeM Eff effRet α) (f : α → FreeM Eff effRet β) : FreeM Eff effRet β :=
   match x with
@@ -145,18 +156,6 @@ def InstructionEffect.ret : InstructionEffect → Type
   | .archException _ => Unit
   | .returnExecption => Unit
   | .printMessage _ => Unit
-
-/-
-CR clang: leave comment explaining difference between sail and presail,
-maybe namespaces generally.
-- PreSail
-  - Things used in the backend but not exposed.
-- Sail
-  - Things used in the backend and also exposed.
-- Sail.ArchSem
-  - Formerly ConcurrencyInterfaceV2.
-- Sail.ConcurrencyInterfaceV1
--/
 
 /-
 CR clang: explain error types.
