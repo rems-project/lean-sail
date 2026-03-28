@@ -1,5 +1,7 @@
 import Sail.Common
 
+import Cslib.Foundations.Control.Monad.Free
+
 open Sail (Result)
 
 namespace Sail.ArchSem

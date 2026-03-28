@@ -1,6 +1,11 @@
 name = "lean-sail"
 defaultTargets = ["Sail", "SailTest"]
 
+[[require]]
+name = "cslib"
+scope = "leanprover"
+rev = "main"
+
 [[lean_lib]]
 name = "Sail"
 globs = ["Sail.**"]
