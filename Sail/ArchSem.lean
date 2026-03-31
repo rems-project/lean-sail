@@ -119,6 +119,13 @@ instance : Monad (FreeM Eff effRet) where
   pure x := FreeM.pure x
   bind := FreeM.bind
 
+def FreeM.liftM {m : Type → Type} [Monad m] {Eff : Type} {ret : Eff → Type}
+    (interp : (eff : Eff) → m (ret eff)) : FreeM Eff ret α → m α
+  | .pure a => return a
+  | .impure eff cont => do
+    let res ← interp eff
+    FreeM.liftM interp (cont res)
+
 /--
 The ArchSem interface ISA Effect type.
 Represents primitive operations an architecture instruction can perform.
