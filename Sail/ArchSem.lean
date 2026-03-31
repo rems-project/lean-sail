@@ -145,8 +145,8 @@ inductive InstructionEffect where
 def InstructionEffect.ret : InstructionEffect → Type
   | .regRead reg _ => Arch.register_type reg
   | .regWrite _ _ _ => Unit
-  | .memRead memReq => Result (BitVec (8 * memReq.size) × BitVec (memReq.numTag)) Arch.abort
-  | .memWrite _ _ _ => Result Unit Arch.abort
+  | .memRead memReq => Except Arch.abort (BitVec (8 * memReq.size) × BitVec (memReq.numTag))
+  | .memWrite _ _ _ => Except Arch.abort Unit
   | .memWriteAnnounce _ => Unit
   | .barrier _ => Unit
   | .cacheOp _ => Unit
@@ -178,21 +178,21 @@ instruction monad.
 -/
 abbrev PreSailM (userError : Type) :=
   FreeM
-    (Result InstructionEffect (Sail.Error userError))
-    (fun | .Ok eff => eff.ret | .Err _ => Empty)
+    (Except (Sail.Error userError) InstructionEffect)
+    (fun | .ok eff => eff.ret | .error _ => Empty)
 
 abbrev PreSailME ue exception :=
   FreeM
-    (Result (Result InstructionEffect (Sail.Error ue)) exception)
-    (fun | .Ok (.Ok eff) => eff.ret | .Ok (.Err _) => Empty | _ => Empty)
+    (Except exception (Except (Sail.Error ue) InstructionEffect))
+    (fun | .ok (.ok eff) => eff.ret | .ok (.error _) => Empty | _ => Empty)
 
 instance: MonadExcept ue (PreSailME ue α) where
-  throw e := .impure (.Ok (.Err (.User e))) Empty.elim
+  throw e := .impure (.ok (.error (.User e))) Empty.elim
   tryCatch eff h :=
     let rec tryCatch eff h :=
       match eff with
         | .pure v => .pure v
-        | .impure (.Ok (.Err (.User err))) _cont => h err
+        | .impure (.ok (.error (.User err))) _cont => h err
         | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
     tryCatch eff h
 
@@ -208,19 +208,19 @@ export RegisterRef (Reg)
 def sailTryCatch (e : PreSailM ue α) (h : ue → PreSailM ue α) : PreSailM ue α :=
   match e with
   | .pure v => .pure v
-  | .impure (.Err (.User e)) _cont => h e
+  | .impure (.error (.User e)) _cont => h e
   | .impure eff cont => .impure eff (fun v => sailTryCatch (cont v) h)
 
 @[simp_sail]
-def sailThrow (e : ue) : PreSailM ue α := .impure (.Err (.User e)) Empty.elim
+def sailThrow (e : ue) : PreSailM ue α := .impure (.error (.User e)) Empty.elim
 
 instance: MonadExceptOf (Sail.Error userError) (PreSailM userError) where
-  throw e := FreeM.impure (.Err e) Empty.elim
+  throw e := FreeM.impure (.error e) Empty.elim
   tryCatch eff h :=
     let rec tryCatch eff h := match eff with
     | .pure v => .pure v
-    | .impure (.Err e) _cont => h e
-    | .impure (.Ok eff) cont => .impure (.Ok eff) (fun v => tryCatch (cont v) h)
+    | .impure (.error e) _cont => h e
+    | .impure (.ok eff) cont => .impure (.ok eff) (fun v => tryCatch (cont v) h)
   tryCatch eff h
 
 def unwrapValue : (x : PreSailM ue α) → match x with | FreeM.pure _ => α | FreeM.impure _ _ => Unit
@@ -228,7 +228,7 @@ def unwrapValue : (x : PreSailM ue α) → match x with | FreeM.pure _ => α | F
   | .impure _ _ => ()
 
 def choose_fin (n : Nat) : PreSailM ue (Fin n) :=
-  FreeM.impure (Result.Ok (InstructionEffect.choice n)) FreeM.pure
+  FreeM.impure (Except.ok (InstructionEffect.choice n)) FreeM.pure
 
 def undefined_unit (_ : Unit) : PreSailM ue Unit := pure ()
 
@@ -246,17 +246,17 @@ def undefined_bitvector (n : Nat) : PreSailM ue (BitVec n) := do
 
 def internal_pick {α : Type} (l : List α) : PreSailM ue α := do
   if l.isEmpty then
-    .impure (.Ok (InstructionEffect.choice 0)) (fun (n : Fin 0) => nomatch n)
+    .impure (.ok (InstructionEffect.choice 0)) (fun (n : Fin 0) => nomatch n)
   else
     return l.get (← choose_fin l.length)
 
 @[simp_sail]
 def writeReg (r : Arch.register) (v : Arch.register_type r) : PreSailM ue PUnit :=
-  FreeM.impure (Result.Ok (InstructionEffect.regWrite r Option.none v)) FreeM.pure
+  FreeM.impure (Except.ok (InstructionEffect.regWrite r Option.none v)) FreeM.pure
 
 @[simp_sail]
 def readReg (r : Arch.register) : PreSailM ue (Arch.register_type r) :=
-  FreeM.impure (Result.Ok (InstructionEffect.regRead r Option.none)) FreeM.pure
+  FreeM.impure (Except.ok (InstructionEffect.regRead r Option.none)) FreeM.pure
 
 @[simp_sail]
 def readRegRef (reg_ref : RegisterRef α) : PreSailM ue α :=
@@ -274,21 +274,25 @@ def reg_deref (reg_ref : RegisterRef α) : PreSailM ue α :=
 
 @[simp_sail]
 def assert (p : Bool) (s : String) : PreSailM ue Unit :=
-  if p then .pure () else .impure (.Err (.Assertion s)) Empty.elim
+  if p then .pure () else .impure (.error (.Assertion s)) Empty.elim
 
 @[simp_sail]
 def sail_mem_read (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) :
     PreSailM ue (Result ((Vector (BitVec 8) n) × (Vector Bool nt)) Arch.abort) :=
   let req := mem_req.toArchSem
-  let resultToSail
-      : Result ( BitVec (8*n)         ×  BitVec nt)       Arch.abort
-      → Result ((Vector (BitVec 8) n) × (Vector Bool nt)) Arch.abort
-    := Result.map (fun (value,tags) =>
+  let bitVecsToSail
+      : Except Arch.abort ( BitVec (8*n)         ×  BitVec nt      )
+      → Except Arch.abort ((Vector (BitVec 8) n) × (Vector Bool nt))
+    := Except.map (fun (value,tags) =>
       let valueBytes := bitvec_to_vecbytes value
       let tagsVector := bitvec_to_vecbool tags
       (valueBytes, tagsVector) )
-  FreeM.impure (.Ok (InstructionEffect.memRead req))
-    (FreeM.pure ∘ resultToSail)
+   let exceptToResult {ε α : Type} : Except ε α → Result α ε
+     | .ok a => .Ok a
+     | .error e => .Err e
+  .impure (.ok (InstructionEffect.memRead req))
+    (.pure ∘ exceptToResult ∘ bitVecsToSail)
+
 
 @[simp_sail]
 def sail_mem_write (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc)
@@ -297,10 +301,12 @@ def sail_mem_write (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Ar
   let req := mem_req.toArchSem
   let value : BitVec (8*n) := vecbytes_to_bitvec valueBytes
   let tags : BitVec nt := vecbool_to_bitvec tagsVector
-  let resultToSail : Result Unit Arch.abort → Result (Option Bool) Arch.abort
-    := Result.map (fun () => Option.none)
-  FreeM.impure (.Ok (InstructionEffect.memWrite req value tags))
-    (FreeM.pure ∘ resultToSail)
+  let resultToSail : Except Arch.abort Unit → Result (Option Bool) Arch.abort
+    | .ok () => .Ok (.none)
+    | .error abort => .Err abort
+  .impure (.ok (InstructionEffect.memWrite req value tags))
+    (.pure ∘ resultToSail)
+
 
 @[simp_sail]
 def sail_sys_reg_read (_id : Arch.sys_reg_id) (r : RegisterRef α) : PreSailM ue α :=
@@ -312,46 +318,46 @@ def sail_sys_reg_write (_id : Arch.sys_reg_id) (r : RegisterRef α) (v : α) : P
 
 def sail_mem_address_announce (ann : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc)
     : PreSailM ue Unit :=
-  .impure (.Ok (.memWriteAnnounce ann.toArchSem)) .pure
+  .impure (.ok (.memWriteAnnounce ann.toArchSem)) .pure
 
 @[simp_sail]
 def sail_translation_start (t : Arch.trans_start) : PreSailM ue Unit :=
-  .impure (.Ok (.translationStart t)) .pure
+  .impure (.ok (.translationStart t)) .pure
 
 @[simp_sail]
 def sail_translation_end (t : Arch.trans_end) : PreSailM ue Unit :=
-  .impure (.Ok (.translationEnd t)) .pure
+  .impure (.ok (.translationEnd t)) .pure
 
 @[simp_sail]
 def sail_barrier (b : Arch.barrier) : PreSailM ue Unit :=
-  .impure (.Ok (.barrier b)) .pure
+  .impure (.ok (.barrier b)) .pure
 
 @[simp_sail]
 def sail_take_exception (e : Arch.exn) : PreSailM ue Unit :=
-  .impure (.Ok (.archException e)) .pure
+  .impure (.ok (.archException e)) .pure
 
 @[simp_sail]
 def sail_return_exception (_ : Unit) : PreSailM ue Unit :=
-  .impure (.Ok (.returnExecption)) .pure
+  .impure (.ok (.returnExecption)) .pure
 
 @[simp_sail]
 def sail_cache_op (op : Arch.cache_op) : PreSailM ue Unit :=
-  .impure (.Ok (.cacheOp op)) .pure
+  .impure (.ok (.cacheOp op)) .pure
 
 @[simp_sail]
 def sail_tlbi (op : Arch.tlbi) : PreSailM ue Unit :=
-  .impure (.Ok (.tlbOp op)) .pure
+  .impure (.ok (.tlbOp op)) .pure
 
 @[simp_sail]
 def cycle_count (_ : Unit) : PreSailM ue Unit :=
-  .impure (.Ok (.clockCycle)) .pure
+  .impure (.ok (.clockCycle)) .pure
 
 @[simp_sail]
 def get_cycle_count (_ : Unit) : PreSailM ue Nat := do
-  .impure (.Ok (.getCycleCount)) .pure
+  .impure (.ok (.getCycleCount)) .pure
 
 def print_effect (str : String) : PreSailM ue Unit :=
-  .impure (.Ok (.printMessage str)) .pure
+  .impure (.ok (.printMessage str)) .pure
 
 def print_int_effect (str : String) (n : Int) : PreSailM ue Unit :=
   print_effect s!"{str}{n}\n"
@@ -368,18 +374,18 @@ def sailTryCatchE (eff : PreSailME ue e α) (h : ue → PreSailME ue e α)
 
 def PreSailME.run : PreSailME ue α α → PreSailM ue α
  | .pure v => .pure v
- | .impure (.Err ret) _cont => .pure ret
- | .impure (.Ok eff) cont => .impure eff (fun v => PreSailME.run (cont (cast (by split <;> rfl) v)))
+ | .impure (.error ret) _cont => .pure ret
+ | .impure (.ok eff) cont => .impure eff (fun v => PreSailME.run (cont (cast (by split <;> rfl) v)))
 
 def PreSailME.throw (e : α) : PreSailME ue α β :=
-  .impure (.Err e) Empty.elim
+  .impure (.error e) Empty.elim
 
 instance : MonadLift (PreSailM ue) (PreSailME ue ε) where
   monadLift m :=
     let rec lift m :=
       match m with
       | .pure v => .pure v
-      | .impure eff cont => .impure (.Ok eff) (fun v => lift (cont (cast (by symm ; split <;> rfl) v)))
+      | .impure eff cont => .impure (.ok eff) (fun v => lift (cont (cast (by symm ; split <;> rfl) v)))
     lift m
 
 end Sail.ArchSem.PreSail
