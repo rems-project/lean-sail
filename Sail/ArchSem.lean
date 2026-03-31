@@ -314,29 +314,37 @@ def sail_sys_reg_read (_id : Arch.sys_reg_id) (r : RegisterRef α) : PreSailM ue
 def sail_sys_reg_write (_id : Arch.sys_reg_id) (r : RegisterRef α) (v : α) : PreSailM ue Unit :=
   writeRegRef r v
 
-def sail_mem_address_announce (_ann : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) : PreSailM ue Unit :=
-  pure ()
+def sail_mem_address_announce (ann : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc)
+    : PreSailM ue Unit :=
+  .liftBind (.ok (.memWriteAnnounce ann.toArchSem)) .pure
 
 @[simp_sail]
-def sail_translation_start (_ : Arch.trans_start) : PreSailM ue Unit := pure ()
+def sail_translation_start (t : Arch.trans_start) : PreSailM ue Unit :=
+  .liftBind (.ok (.translationStart t)) .pure
 
 @[simp_sail]
-def sail_translation_end (_ : Arch.trans_end) : PreSailM ue Unit := pure ()
+def sail_translation_end (t : Arch.trans_end) : PreSailM ue Unit :=
+  .liftBind (.ok (.translationEnd t)) .pure
 
 @[simp_sail]
-def sail_barrier (_ : Arch.barrier) : PreSailM ue Unit := pure ()
+def sail_barrier (b : Arch.barrier) : PreSailM ue Unit :=
+  .liftBind (.ok (.barrier b)) .pure
 
 @[simp_sail]
-def sail_take_exception (_ : Arch.exn) : PreSailM ue Unit := pure ()
+def sail_take_exception (e : Arch.exn) : PreSailM ue Unit :=
+  .liftBind (.ok (.archException e)) .pure
 
 @[simp_sail]
-def sail_return_exception (_ : Unit) : PreSailM ue Unit := pure ()
+def sail_return_exception (_ : Unit) : PreSailM ue Unit :=
+  .liftBind (.ok (.returnExecption)) .pure
 
 @[simp_sail]
-def sail_cache_op (_ : Arch.cache_op) : PreSailM ue Unit := pure ()
+def sail_cache_op (op : Arch.cache_op) : PreSailM ue Unit :=
+  .liftBind (.ok (.cacheOp op)) .pure
 
 @[simp_sail]
-def sail_tlbi (_ : Arch.tlbi) : PreSailM ue Unit := pure ()
+def sail_tlbi (op : Arch.tlbi) : PreSailM ue Unit :=
+  .liftBind (.ok (.tlbOp op)) .pure
 
 @[simp_sail]
 def cycle_count (_ : Unit) : PreSailM ue Unit :=
