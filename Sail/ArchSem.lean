@@ -58,6 +58,9 @@ class Arch where
   CR clang: find this in the ARM reference manual.
   ARM system registers can be accessed implicitly or explicitly which changes
   their timing properties? This type enumerates the access types.
+
+  See ARM reference manual DDI0487_M.a.a_a: p8347, p8368
+    - direct/indirect write to sys regs. Hazard checking.
   -/
   sys_reg_id : Type
 
@@ -167,8 +170,12 @@ def ExceptF (ε : Type) (m : Type → Type) : Type → Type :=
 
 /-
 CR clang: explain error types.
+- arch eception e.g. page fault, sys fault (user mode to system of any kind)
+- return exception (return from system to user mode `eret` instruction in arm (only instruction with that effect))
 - userError (passedto PreSailM) (Unit in sail-tiny-arm)
+  - model specific error
 - exception (passed to PreSailME)
+  - sail function excpetion (e.g. try catch in sail) internal to sail function
 - Sail.Error
   - sail-internal error, assertion, infinite-nondeterminisim, etc.
 -/
