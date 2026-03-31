@@ -316,7 +316,7 @@ def Error.print : Error UE → String
   | Assertion s => s!"Assertion failed: {s}"
   | User _ => "Uncaught user exception"
 
--- TODO: comment about this.
+/- TODO: Use Except type from the lean4 standard library. -/
 inductive Result (α : Type) (β : Type) where
   | Ok (_ : α)
   | Err (_ : β)
@@ -324,7 +324,7 @@ inductive Result (α : Type) (β : Type) where
 export Result(Ok Err)
 
 def Result.map (f: α → β) (r : Result α ε) : Result β ε := match r with
-  | Result.Ok v => Result.Ok (f v)
-  | Result.Err e => Result.Err e
+| Result.Ok v => Result.Ok (f v)
+| Result.Err e => Result.Err e
 
 end Sail
