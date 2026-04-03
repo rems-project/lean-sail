@@ -12,7 +12,7 @@ instance instMemIntRange : Membership Int IntRange where
   mem r i := (if r.step > 0 then r.start ≤ i ∧ i ≤ r.stop else r.stop ≤ i ∧ i ≤ r.start ) ∧ (i - r.start) % r.step = 0
 
 instance : DecidableRel (fun (i : Int) (r : IntRange) => i ∈ r) := fun i r => by
-  simp [instMemIntRange]
+  simp [Membership.mem]
   infer_instance
 
 theorem toNat_le {n : Nat} : Int.toNat m ≤ n ↔ m ≤ n := by
@@ -42,9 +42,9 @@ theorem toNat_lt_toNat {a b : Int} (hb : 0 < b) : Int.toNat a < Int.toNat b ↔ 
     split
     · rw [toNat_lt_toNat]
       · omega
-      · simp_all [instMemIntRange]
+      · simp_all [Membership.mem]
         omega
-    · simp_all only [instMemIntRange, gt_iff_lt, ite_false, and_true, ne_eq]; rw [toNat_lt_toNat]
+    · simp_all only [Membership.mem, gt_iff_lt, ite_false, and_true, ne_eq]; rw [toNat_lt_toNat]
       · omega
       · omega
 
@@ -69,9 +69,9 @@ instance [Monad m] : ForIn' m IntRange Int inferInstance where
     split
     · rw [toNat_lt_toNat]
       · omega
-      · simp_all [instMemIntRange]
+      · simp_all [Membership.mem]
         omega
-    · simp_all only [instMemIntRange, gt_iff_lt, ite_false, ne_eq]; rw [toNat_lt_toNat]
+    · simp_all only [Membership.mem, gt_iff_lt, ite_false, ne_eq]; rw [toNat_lt_toNat]
       · omega
       · omega
   have := range.step_pos
