@@ -870,6 +870,9 @@ notation:50 x "<b" y => decide (x < y)
 notation:50 x "≥b" y => decide (x ≥ y)
 notation:50 x ">b" y => decide (x > y)
 
+@[simp_sail]
+def eq_anything [BEq α] (x : α) (y : α) : Bool := x == y
+
 -- for termination measures, since they're almost always `Int`s but not always
 abbrev Nat.toNat (x : Nat) := x
 
