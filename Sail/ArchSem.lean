@@ -9,8 +9,8 @@ class Arch where
   /-- Number of bits used to index an address. -/
   addr_size : Nat
   /--
-  CR clang: check this is right: §B.2.10 of the reference manual.
-  ARMs memory model has "Memory types and attributes" such as "Device Memory".
+  ARMs memory model has "Memory types and attributes" such as
+  "Normal Memory" or "Device Memory".
   -/
   addr_space : Type
   /-- Is this architecture CHERI-enabled. -/
@@ -53,12 +53,8 @@ class Arch where
   /-- Type thrown on fault or exception. -/
   exn : Type
   /--
-  CR clang: find this in the ARM reference manual.
   ARM system registers can be accessed implicitly or explicitly which changes
   their timing properties? This type enumerates the access types.
-
-  See ARM reference manual DDI0487_M.a.a_a: p8347, p8368
-    - direct/indirect write to sys regs. Hazard checking.
   -/
   sys_reg_id : Type
 
@@ -101,12 +97,15 @@ def Mem_request.toArchSem
   , numTag := numTag }
 
 /--
-CR clang: TODO comment on why I dont use the CS-lib style free monad.
+Free Monad, based on the _freer monad_ of Kiselyov and Ishii.
 
-Free Monad. Unlike the CS-lib free monad, this one can live in the same
-type universe as its effect return types.
+Unlike the standard implementation of the freer monad such as in CSLib,
+we use a separate function for effect return types which
+lets the free monad live in the same universe as its effect
+return types.
 -/
-inductive FreeM.{u, v, w} (Eff : Type v) (effRet : Eff → Type u) (α : Type w) where
+inductive FreeM.{u, v, w} (Eff : Type v) (effRet : Eff → Type u) (α : Type w)
+    : Type (max u (max v w)) where
   | pure (a : α) : FreeM Eff effRet α
   | impure (call : Eff) (cont : effRet call → FreeM Eff effRet α) : FreeM Eff effRet α
 
@@ -167,17 +166,6 @@ def InstructionEffect.ret : InstructionEffect → Type
   | .returnExecption => Unit
   | .printMessage _ => Unit
 
-/-
-CR clang: explain error types.
-- arch eception e.g. page fault, sys fault (user mode to system of any kind)
-- return exception (return from system to user mode `eret` instruction in arm (only instruction with that effect))
-- userError (passedto PreSailM) (Unit in sail-tiny-arm)
-  - model specific error
-- exception (passed to PreSailME)
-  - sail function excpetion (e.g. try catch in sail) internal to sail function
-- Sail.Error
-  - sail-internal error, assertion, infinite-nondeterminisim, etc.
--/
 
 /--
 The lean-backend fills in the userError type to define `SailM`, the ISA
