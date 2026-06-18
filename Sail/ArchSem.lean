@@ -276,8 +276,8 @@ def sail_mem_read (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arc
     PreSailM ue (Result ((Vector (BitVec 8) n) × (Vector Bool nt)) Arch.abort) :=
   let req := mem_req.toArchSem
   let bitVecsToSail
-      : Except Arch.abort ( BitVec (8*n)         ×  BitVec nt      )
-      → Except Arch.abort ((Vector (BitVec 8) n) × (Vector Bool nt))
+      : Except Arch.abort (BitVec (8 * n) × BitVec nt) →
+        Except Arch.abort ((Vector (BitVec 8) n) × (Vector Bool nt))
     := Except.map (fun (value,tags) =>
       let valueBytes := bitvec_to_vecbytes value
       let tagsVector := bitvec_to_vecbool tags
