@@ -75,7 +75,7 @@ This reflects Sail's Mem_request structure, having size and numTags at both
 type and term level. It is used by the sail-generated lean code.
 
 To prevent from exposing this redundancy to ArchSem users, the `Mem_request`
-type is converted to `MemRequst` before reaching the effect interface.
+type is converted to `MemRequest` before reaching the effect interface.
 -/
 structure Mem_request (_size : Nat) (_numTags : Nat)
     (addr_size : Nat) (addr_space : Type) (mem_acc : Type) where
