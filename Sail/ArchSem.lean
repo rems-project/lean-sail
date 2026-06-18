@@ -281,7 +281,7 @@ def sail_mem_read (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arc
     := Except.map (fun (value,tags) =>
       let valueBytes := bitvec_to_vecbytes value
       let tagsVector := bitvec_to_vecbool tags
-      (valueBytes, tagsVector) )
+      (valueBytes, tagsVector))
    let exceptToResult {ε α : Type} : Except ε α → Result α ε
      | .ok a => .Ok a
      | .error e => .Err e
