@@ -96,6 +96,30 @@ def Mem_request.toArchSem
   , size := size
   , numTag := numTag }
 
+/-- An effect is type which can be used to instantiate a free monad. -/
+class Effect.{u, v} (Eff : Type v) where
+  ret : Eff → Type u
+
+/-- Free monad effects are compositional. -/
+instance [Effect A] [Effect B] : Effect (A ⊕ B) where
+  ret eff := match eff with
+    | .inl a => Effect.ret a
+    | .inr b => Effect.ret b
+
+instance [Effect A] : Effect (Except ε A) where
+  ret eff := match eff with
+    | .error _ => Empty
+    | .ok eff => Effect.ret eff
+
+/--
+The finite choice effect used to introducing finite non-determinisim.
+-/
+def FinChoice := Nat
+def FinChoice.ret : FinChoice → Type := fun n => Fin n
+
+instance : Effect FinChoice where
+  ret choice := Fin choice
+
 /--
 Free Monad, based on the _freer monad_ of Kiselyov and Ishii.
 
@@ -104,22 +128,22 @@ we use a separate function for effect return types which
 lets the free monad live in the same universe as its effect
 return types.
 -/
-inductive FreeM.{u, v, w} (Eff : Type v) (effRet : Eff → Type u) (α : Type w)
+inductive FreeM.{u, v, w} (Eff : Type v) [Effect.{u, v} Eff] (α : Type w)
     : Type (max u (max v w)) where
-  | pure (a : α) : FreeM Eff effRet α
-  | impure (call : Eff) (cont : effRet call → FreeM Eff effRet α) : FreeM Eff effRet α
+  | pure (a : α) : FreeM Eff α
+  | impure (call : Eff) (cont : Effect.ret call → FreeM Eff α) : FreeM Eff α
 
-def FreeM.bind (x : FreeM Eff effRet α) (f : α → FreeM Eff effRet β) : FreeM Eff effRet β :=
+def FreeM.bind [Effect Eff] (x : FreeM Eff α) (f : α → FreeM Eff β) : FreeM Eff β :=
   match x with
     | FreeM.pure x => f x
     | FreeM.impure op cont => FreeM.impure op (fun r => FreeM.bind (cont r) f)
 
-instance : Monad (FreeM Eff effRet) where
+instance [Effect Eff] : Monad (FreeM Eff) where
   pure x := FreeM.pure x
   bind := FreeM.bind
 
-def FreeM.liftM {m : Type → Type} [Monad m] {Eff : Type} {ret : Eff → Type}
-    (interp : (eff : Eff) → m (ret eff)) : FreeM Eff ret α → m α
+def FreeM.liftM {m : Type → Type} [Monad m] [Effect Eff]
+    (interp : (eff : Eff) → m (Effect.ret eff)) : FreeM Eff α → m α
   | .pure a => return a
   | .impure eff cont => do
     let res ← interp eff
@@ -164,31 +188,18 @@ def InstructionEffect.ret : InstructionEffect → Type
   | .returnExecption => Unit
   | .printMessage _ => Unit
 
-/--
-The finite choice effect used to introducing finite non-determinisim.
--/
-def FinChoice := Nat
-def FinChoice.ret : FinChoice → Type := fun n => Fin n
+instance : Effect InstructionEffect where
+  ret := InstructionEffect.ret
 
 /--
 The lean-backend fills in the userError type to define `SailM`, the ISA
 instruction monad.
 -/
 abbrev PreSailM (userError : Type) :=
-  FreeM
-    ((Except (Sail.Error userError) InstructionEffect) ⊕ FinChoice)
-    (fun
-      | .inl (.ok eff) => eff.ret
-      | .inl (.error _) => Empty
-      | .inr choice => choice.ret)
+  FreeM ((Except (Sail.Error userError) InstructionEffect) ⊕ FinChoice)
 
 abbrev PreSailME ue exception :=
-  FreeM
-    (Except exception ((Except (Sail.Error ue) InstructionEffect) ⊕ FinChoice))
-    (fun
-      | .ok (.inl (.ok eff)) => eff.ret
-      | .ok (.inr choice) => choice.ret
-      | _ => Empty)
+  FreeM (Except exception ((Except (Sail.Error ue) InstructionEffect) ⊕ FinChoice))
 
 instance: MonadExcept ue (PreSailME ue α) where
   throw e := .impure (.ok (.inl (.error (.User e)))) Empty.elim
@@ -379,7 +390,8 @@ def sailTryCatchE (eff : PreSailME ue e α) (h : ue → PreSailME ue e α)
 def PreSailME.run : PreSailME ue α α → PreSailM ue α
  | .pure v => .pure v
  | .impure (.error ret) _cont => .pure ret
- | .impure (.ok eff) cont => .impure eff (fun v => PreSailME.run (cont (cast (by split <;> rfl) v)))
+ | .impure (.ok eff) cont =>
+   .impure eff (fun v => PreSailME.run (cont v))
 
 def PreSailME.throw (e : α) : PreSailME ue α β :=
   .impure (.error e) Empty.elim
@@ -389,7 +401,7 @@ instance : MonadLift (PreSailM ue) (PreSailME ue ε) where
     let rec lift m :=
       match m with
       | .pure v => .pure v
-      | .impure eff cont => .impure (.ok eff) (fun v => lift (cont (cast (by symm ; split <;> rfl) v)))
+      | .impure eff cont => .impure (.ok eff) (fun v => lift (cont v))
     lift m
 
 end Sail.ArchSem.PreSail
