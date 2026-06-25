@@ -1,12 +1,6 @@
 name = "lean-sail"
-defaultTargets = ["Sail", "SailTest"]
+defaultTargets = ["Sail"]
 
 [[lean_lib]]
 name = "Sail"
-globs = ["Sail.**"]
-leanOptions.weak.linter.style.nameCheck = false
-
-[[lean_lib]]
-name = "SailTest"
-globs = ["SailTest.**"]
 leanOptions.weak.linter.style.nameCheck = false
