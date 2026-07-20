@@ -112,12 +112,11 @@ abbrev PreSailM (RegisterType : Register → Type) (c : ChoiceSource) (ue: Type)
 variable (RegisterType) in
 abbrev PreSailME c ue α := ExceptT (Sail.Error ue ⊕ α) (PreSailM RegisterType c ue)
 
-namespace PreSail
-
 inductive RegisterRef (RegisterType : Register → Type) : Type → Type where
   | Reg (r : Register) : RegisterRef _ (RegisterType r)
 export RegisterRef (Reg)
 
+namespace PreSail
 
 @[simp_sail]
 def sailTryCatch (e : PreSailM RegisterType c ue α) (h : ue → PreSailM RegisterType c ue α) :
@@ -177,12 +176,12 @@ def readReg (r : Register) : PreSailM RegisterType c ue (RegisterType r) := do
   pure s
 
 @[simp_sail]
-def readRegRef (reg_ref : @RegisterRef Register RegisterType α) : PreSailM RegisterType c ue α := do
+def readRegRef (reg_ref : @RegisterRef Register RegisterType α) : PreSailM RegisterType c ue α :=
   match reg_ref with | .Reg r => readReg r
 
 @[simp_sail]
 def writeRegRef (reg_ref : @RegisterRef Register RegisterType α) (a : α) :
-  PreSailM RegisterType c ue Unit := do
+  PreSailM RegisterType c ue Unit :=
   match reg_ref with | .Reg r => writeReg r a
 
 @[simp_sail]

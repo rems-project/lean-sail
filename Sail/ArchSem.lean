@@ -168,7 +168,7 @@ inductive InstructionEffect where
   | translationStart (translationStart : Arch.trans_start)
   | translationEnd (translationEnd : Arch.trans_end)
   | archException (exception : Arch.exn)
-  | returnExecption
+  | returnException
   | printMessage (msg : String)
 
 def InstructionEffect.ret : InstructionEffect → Type
@@ -185,7 +185,7 @@ def InstructionEffect.ret : InstructionEffect → Type
   | .translationStart _ => Unit
   | .translationEnd _ => Unit
   | .archException _ => Unit
-  | .returnExecption => Unit
+  | .returnException => Unit
   | .printMessage _ => Unit
 
 instance : Effect InstructionEffect where
@@ -211,13 +211,14 @@ instance: MonadExcept ue (PreSailME ue α) where
         | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
     tryCatch eff h
 
-namespace PreSail
-
-variable [Arch]
 
 inductive RegisterRef : Type → Type where
   | Reg (r : Arch.register) : RegisterRef (Arch.register_type r)
 export RegisterRef (Reg)
+
+namespace PreSail
+
+variable [Arch]
 
 @[simp_sail]
 def sailTryCatch (e : PreSailM ue α) (h : ue → PreSailM ue α) : PreSailM ue α :=
@@ -258,6 +259,18 @@ def undefined_range (low high : Int) : PreSailM ue Int := do
 
 def undefined_bitvector (n : Nat) : PreSailM ue (BitVec n) := do
   return @BitVec.ofFin n (← choose_fin _)
+
+def undefined_int (_ : Unit) : PreSailM ue Int := do
+  .impure (.inl (.error (.InfiniteNondeterminisim))) (fun x => by simp [Effect.ret] at x; grind)
+
+def undefined_nat (_ : Unit) : PreSailM ue Nat := do
+  .impure (.inl (.error (.InfiniteNondeterminisim))) (fun x => by simp [Effect.ret] at x; grind)
+
+def undefined_string (_ : Unit) : PreSailM ue String := do
+  .impure (.inl (.error (.InfiniteNondeterminisim))) (fun x => by simp [Effect.ret] at x; grind)
+
+def undefined_vector (n : Nat) (a : α) : PreSailM ue (Vector α n) :=
+  pure <| .replicate n a
 
 def internal_pick {α : Type} (l : List α) : PreSailM ue α := do
   if l.isEmpty then
@@ -353,7 +366,7 @@ def sail_take_exception (e : Arch.exn) : PreSailM ue Unit :=
 
 @[simp_sail]
 def sail_return_exception (_ : Unit) : PreSailM ue Unit :=
-  .impure (.inl (.ok (.returnExecption))) .pure
+  .impure (.inl (.ok (.returnException))) .pure
 
 @[simp_sail]
 def sail_cache_op (op : Arch.cache_op) : PreSailM ue Unit :=
