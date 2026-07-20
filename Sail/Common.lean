@@ -260,7 +260,7 @@ def set_slice {n : Nat} (m : Nat) (bv : BitVec n) (start : Nat) (bv' : BitVec m)
   BitVec.updateSubrange' bv start m bv'
 
 def String.leadingSpaces (s : String) : Nat :=
-  s.length - (s.dropWhile (· = ' ')).positions.count
+  s.length - (s.dropWhile (· = ' ')).positions.length
 
 abbrev Vector.length (_v : Vector α n) : Nat := n
 
