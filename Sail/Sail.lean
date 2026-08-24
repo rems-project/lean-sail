@@ -1,5 +1,6 @@
 import Sail.Attr
 import Sail.ArchSem
+import Sail.ArchSemSequential
 import Sail.ConcurrencyInterfaceV1
 
 namespace Sail
