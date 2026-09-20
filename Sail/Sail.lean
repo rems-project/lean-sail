@@ -1,7 +1,11 @@
-import Sail.Attr
-import Sail.ArchSem
-import Sail.ArchSemSequential
-import Sail.ConcurrencyInterfaceV1
+module
+
+public import Sail.Attr
+public import Sail.ArchSem
+public import Sail.ArchSemSequential
+public import Sail.ConcurrencyInterfaceV1
+
+@[expose] public section
 
 namespace Sail
 
@@ -31,8 +35,6 @@ def ExceptM.run (m : ExceptM α α) : α :=
     | .ok e => e
 
 namespace Sail.ConcurrencyInterfaceV1
-
-open PreSail
 
 variable {Register : Type} {RegisterType : Register → Type} [DecidableEq Register] [Hashable Register]
 

@@ -4,11 +4,18 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Author(s): Shilpi Goel, Siddharth Bhat, Arthur Adjedj
 -/
 
+module
+
 -- inspired from https://github.com/leanprover/LNSym/blob/main/Arm/BitVec.lean
 
-import Lean.Elab.Term
-import Lean.Meta.Reduce
-import Std.Tactic.BVDecide
+public meta import Lean.Elab.Term
+public import Lean.Elab.Term
+public meta import Lean.Meta.Reduce
+public import Lean.Meta.Reduce
+public meta import Std.Tactic.BVDecide
+public import Std.Tactic.BVDecide
+
+public meta section
 
 open BitVec
 

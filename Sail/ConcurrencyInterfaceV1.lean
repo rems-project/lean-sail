@@ -1,8 +1,12 @@
-import Sail.Attr
-import Sail.Common
+module
 
-import Std.Data.ExtDHashMap
-import Std.Data.ExtHashMap
+public import Sail.Attr
+public import Sail.Common
+
+public import Std.Data.ExtDHashMap
+public import Std.Data.ExtHashMap
+
+@[expose] public section
 
 namespace Sail.ConcurrencyInterfaceV1
 
