@@ -1,9 +1,13 @@
-import Sail.ArchSem
+module
 
-import Std.Data.ExtHashMap
+public import Sail.ArchSem
+
+public import Std.Data.ExtHashMap
 
 -- A simple sequential interpretation of the ArchSem interface, roughly following the previous v1
 -- interface and Christopher Lang's archsem-lean model-specific version.
+
+@[expose] public section
 
 namespace Sail.ArchSem
 
@@ -84,7 +88,11 @@ def interpretSailEffects : PreSailM ue ty → ArchSemSeqM ue ty :=
   FreeM.liftM (fun
     | .inl (.error err) => throw err
     | .inl (.ok eff) => interpretInstructionEffect eff
-    | .inr choice => if h : (0 : Nat) < choice then pure (⟨0, h⟩ : Fin choice) else throw .Unreachable)
+    | .inr choice =>
+      -- `FinChoice` is a `def` over `Nat`; name the `Nat` explicitly so instance search (which does
+      -- not unfold it) finds `Nat.decLt`.
+      let n : Nat := choice
+      if h : 0 < n then pure (⟨0, h⟩ : Fin choice) else throw .Unreachable)
 
 -- A function to provide a default toplevel for Sail models
 

@@ -1,4 +1,8 @@
-import Sail.Common
+module
+
+public import Sail.Common
+
+@[expose] public section
 
 open Sail (Result)
 
