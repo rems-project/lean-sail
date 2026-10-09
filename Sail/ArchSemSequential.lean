@@ -84,7 +84,9 @@ def interpretSailEffects : PreSailM ue ty → ArchSemSeqM ue ty :=
   FreeM.liftM (fun
     | .inl (.error err) => throw err
     | .inl (.ok eff) => interpretInstructionEffect eff
-    | .inr choice => if h : (0 : Nat) < choice then pure (⟨0, h⟩ : Fin choice) else throw .Unreachable)
+    | .inr choice =>
+       let c : Nat := choice
+       if h : 0 < c then pure (⟨0, h⟩ : Fin choice) else throw .Unreachable)
 
 -- A function to provide a default toplevel for Sail models
 
