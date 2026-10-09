@@ -301,8 +301,12 @@ def reg_deref (reg_ref : RegisterRef α) : PreSailM ue α :=
   readRegRef reg_ref
 
 @[simp_sail]
-def assert (p : Bool) (s : String) : PreSailM ue Unit :=
+def sail_assert (p : Bool) (s : String) : PreSailM ue Unit :=
   if p then .pure () else .impure (.inl (.error (.Assertion s))) Empty.elim
+
+--- Older versions of Sail used assert, which clashes with newer versions of Lean
+@[simp_sail]
+def assert (p : Bool) (s : String) : PreSailM ue Unit := sail_assert p s
 
 @[simp_sail]
 def sail_mem_read (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) :

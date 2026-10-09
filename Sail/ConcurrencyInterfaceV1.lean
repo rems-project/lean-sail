@@ -189,8 +189,12 @@ def reg_deref (reg_ref : @RegisterRef Register RegisterType α) : PreSailM Regis
   readRegRef reg_ref
 
 @[simp_sail]
-def assert (p : Bool) (s : String) : PreSailM RegisterType c ue Unit :=
+def sail_assert (p : Bool) (s : String) : PreSailM RegisterType c ue Unit :=
   if p then pure () else throw (.Assertion s)
+
+--- Older versions of Sail used assert, which clashes with newer versions of Lean
+@[simp_sail]
+def assert (p : Bool) (s : String) : PreSailM RegisterType c ue Unit := sail_assert p s
 
 @[simp_sail]
 def writeByte (addr : Nat) (value : BitVec 8) : PreSailM RegisterType c ue PUnit := do
