@@ -254,8 +254,10 @@ def undefined_bit (_ : Unit) : PreSailM ue (BitVec 1) := do
 def undefined_bool (_ : Unit) : PreSailM ue Bool := do
   return ((← choose_fin 2) == 0)
 
+/-- Sail's `range(low, high)` is inclusive, so there are `high - low + 1` choices
+(none when `high < low`). -/
 def undefined_range (low high : Int) : PreSailM ue Int := do
-  return (low + (← choose_fin (high - low).toNat))
+  return (low + (← choose_fin (high - low + 1).toNat))
 
 def undefined_bitvector (n : Nat) : PreSailM ue (BitVec n) := do
   return @BitVec.ofFin n (← choose_fin _)
