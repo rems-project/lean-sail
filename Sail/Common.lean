@@ -170,16 +170,20 @@ def parse_hex_bits (n : Nat) (str : String) : BitVec n :=
   let bv := parse_hex_bits_digits (round4 n) (str.drop 2).toString
   bv.setWidth n
 
+/-- As in Sail's C and OCaml runtimes: a `0x` prefix, at least one hex digit,
+and a value that fits in `n` bits. -/
 def valid_hex_bits (n : Nat) (str : String) : Bool :=
-  if str.length < 2 then false else
-  let str := str.drop 2 |>.toString
-  str.all fun x => x.toLower ∈
-    ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'] &&
-  2 ^ n > (parse_hex_bits_digits (round4 n) str).toNat
+  if str.length < 3 || !str.startsWith "0x" then false else
+  let digits := (str.drop 2).toString.toList
+  digits.all (fun x => x.toLower ∈
+    ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']) &&
+  digits.foldl (fun acc c => 16 * acc + (charToHex c).toNat) 0 < 2 ^ n
 
-def valid_dec_bits (_ : Nat) (str : String) : Bool :=
-  str.all fun (x : Char) => x.toLower ∈
-    ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+/-- As in Sail's C and OCaml runtimes: at least one decimal digit and a value
+that fits in `n` bits. -/
+def valid_dec_bits (n : Nat) (str : String) : Bool :=
+  !str.isEmpty && str.all Char.isDigit &&
+  str.foldl (fun acc c => 10 * acc + (c.toNat - '0'.toNat)) 0 < 2 ^ n
 
 @[simp_sail]
 def shift_bits_left (bv : BitVec n) (sh : BitVec m) : BitVec n :=
@@ -253,7 +257,9 @@ def get_slice_int (len : Nat) (n : Int) (lo : Nat) : BitVec len :=
 
 @[simp_sail]
 def set_slice_int (len : Nat) (n : Int) (lo : Nat) (x : BitVec len) : Int :=
-  BitVec.toInt (BitVec.updateSubrange' (BitVec.ofInt len n) lo len x)
+  -- Replace bits `[lo, lo + len)` of the two's complement representation of `n`,
+  -- keeping all other bits, as `set_slice_int` does in Sail's C and OCaml runtimes.
+  n + ((x.toNat : Int) - ((get_slice_int len n lo).toNat : Int)) * 2 ^ lo
 
 @[simp_sail]
 def set_slice {n : Nat} (m : Nat) (bv : BitVec n) (start : Nat) (bv' : BitVec m) : BitVec n :=
