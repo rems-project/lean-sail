@@ -106,6 +106,9 @@ instance (priority := low) : HOr (BitVec n) (BitVec m) (BitVec n) where
 instance (priority := low) : HXor (BitVec n) (BitVec m) (BitVec n) where
   hXor x y := x ^^^ y
 
+instance (β : α → Type) [Inhabited α] [Inhabited (β default)] : Inhabited (Σ x : α, β x) :=
+  ⟨default, default⟩
+
 instance [GetElem? coll Nat elem valid] : GetElem? coll Int elem (λ c i ↦ valid c i.toNat) where
   getElem c i h := c[i.toNat]'h
   getElem? c i := c[i.toNat]?
