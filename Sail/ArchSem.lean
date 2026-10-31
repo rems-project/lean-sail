@@ -201,13 +201,30 @@ abbrev PreSailM (userError : Type) :=
 abbrev PreSailME ue exception :=
   FreeM (Except exception ((Except (Sail.Error ue) InstructionEffect) ⊕ FinChoice))
 
-instance: MonadExcept ue (PreSailME ue α) where
+-- Claude: changed from a direct `MonadExcept` instance to a low-priority `MonadExceptOf`
+-- one, so that `throw Error.Exit` (as generated for Sail's `exit()`) can resolve to the
+-- `MonadExceptOf (Sail.Error ue)` instance below; `MonadExcept`'s error type is an outParam, so
+-- Lean commits to the first instance it finds and would otherwise never try that one.
+instance (priority := low) : MonadExceptOf ue (PreSailME ue α) where
   throw e := .impure (.ok (.inl (.error (.User e)))) Empty.elim
   tryCatch eff h :=
     let rec tryCatch eff h :=
       match eff with
         | .pure v => .pure v
         | .impure (.ok (.inl (.error (.User err)))) _cont => h err
+        | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
+    tryCatch eff h
+
+-- Claude: Sail's `exit()` is translated to `throw Error.Exit`,
+-- which needs a `MonadExceptOf (Sail.Error ue)` instance for the early-return monad as well
+-- as for PreSailM (ConcurrencyInterfaceV1 provides both).
+instance: MonadExceptOf (Sail.Error ue) (PreSailME ue α) where
+  throw e := .impure (.ok (.inl (.error e))) Empty.elim
+  tryCatch eff h :=
+    let rec tryCatch eff h :=
+      match eff with
+        | .pure v => .pure v
+        | .impure (.ok (.inl (.error err))) _cont => h err
         | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
     tryCatch eff h
 
@@ -402,7 +419,7 @@ def print_endline_effect (str : String) : PreSailM ue Unit :=
 
 def sailTryCatchE (eff : PreSailME ue e α) (h : ue → PreSailME ue e α)
     : PreSailME ue e α :=
-  tryCatch eff h
+  tryCatchThe ue eff h -- Claude: was `tryCatch eff h`; see the instance change above
 
 def PreSailME.run : PreSailME ue α α → PreSailM ue α
  | .pure v => .pure v
