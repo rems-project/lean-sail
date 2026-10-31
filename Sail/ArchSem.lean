@@ -86,7 +86,9 @@ structure Mem_request (_size : Nat) (_numTags : Nat)
   num_tag : Nat
 
 /-- Convert the sail-internal memory request type to the ArchSem-external type. -/
-def Mem_request.toArchSem
+-- Claude: reducible so that unifiers working at reducible transparency (e.g. iris-lean's
+-- `iapply`) see through it to the `MemRequest` structure.
+@[reducible] def Mem_request.toArchSem
     {size numTag: Nat}
     (memReq : Mem_request size numTag Arch.addr_size Arch.addr_space Arch.mem_acc)
     : ArchSem.MemRequest :=

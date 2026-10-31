@@ -129,15 +129,18 @@ def vecbytes_to_bitvec (vec : Vector (BitVec 8) n) : BitVec (8 * n) :=
     (fun (i, acc) x => (i+1, acc.or ((x.zeroExtend (8*n)).shiftLeft (i*8))) )
     (0, BitVec.zero (8 * n))
   |> Prod.snd
+-- Claude: built with `List.ofFn` rather than `Vector.ofFn`, whose `Array.ofFn` is defined by
+-- well-founded recursion and so does not reduce under `whnf`; with this, symbolic execution of
+-- generated code by definitional unfolding (e.g. in archsem-iris) can evaluate byte conversions.
 def bitvec_to_vecbytes (bitvec : BitVec (8 * n)) : Vector (BitVec 8) n :=
-  Vector.ofFn (fun i => Sail.BitVec.slice bitvec (8 * i) 8)
+  ⟨(List.ofFn (fun i : Fin n => Sail.BitVec.slice bitvec (8 * i) 8)).toArray, by simp⟩
 def vecbool_to_bitvec (vec : Vector Bool n) : BitVec n :=
   vec.foldl
     (fun (i, acc) b => (i+1, acc.or (((BitVec.ofBool b).zeroExtend n).shiftLeft i) ))
     (0, BitVec.zero n)
   |> Prod.snd
 def bitvec_to_vecbool (bitvec : BitVec n) : Vector Bool n :=
-  Vector.ofFn (fun i => BitVec.getLsb bitvec i)
+  ⟨(List.ofFn (fun i : Fin n => BitVec.getLsb bitvec i)).toArray, by simp⟩
 
 def charToHex (c : Char) : BitVec 4 :=
   match c.toLower with

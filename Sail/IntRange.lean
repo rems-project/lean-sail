@@ -25,31 +25,29 @@ theorem toNat_lt_toNat {a b : Int} (hb : 0 < b) : Int.toNat a < Int.toNat b ↔ 
   mp h := by cases a; exact lt_toNat.1 h; exact Int.lt_trans (Int.neg_of_sign_eq_neg_one rfl) hb
   mpr h := by rw [lt_toNat]; cases a; exact h; exact hb
 
+/-- Claude: an upper bound on the number of elements of the range, used as fuel so that the
+loops below are structurally recursive. Well-founded recursion (the previous definition) does
+not reduce under `whnf`, which blocks symbolic execution of generated code by definitional
+unfolding (e.g. in archsem-iris). The loops still test membership at each step, so extra fuel
+does not change their results. -/
+@[inline] def fuel (range : IntRange) : Nat :=
+  (range.stop - range.start).natAbs / range.step.natAbs + 1
+
 @[inline] protected def forIn' [Monad m] (range : IntRange) (init : β)
     (f : (i : Int) → i ∈ range → β → m (ForInStep β)) : m β :=
-  let rec @[specialize] loop (b : β) (i : Int)
-      (hs : (i - range.start) % range.step = 0) : m β := do
-    if h : i ∈ range then
-      match (← f i h b) with
-      | .done b  => pure b
-      | .yield b =>
-        have := range.step_pos
-        loop b (i + range.step) (by rw [Int.add_comm, Int.add_sub_assoc]; simp_all)
-    else
-      pure b
-  termination_by if range.step > 0 then (range.stop - i + 1).toNat else (i - range.stop + 1).toNat
-  decreasing_by
-    split
-    · rw [toNat_lt_toNat]
-      · omega
-      · simp_all [Membership.mem]
-        omega
-    · simp_all only [Membership.mem, gt_iff_lt, ite_false, and_true, ne_eq]; rw [toNat_lt_toNat]
-      · omega
-      · omega
-
+  let rec @[specialize] loop : Nat → β → (i : Int) → (i - range.start) % range.step = 0 → m β
+    | 0, b, _, _ => pure b
+    | fuel + 1, b, i, hs => do
+      if h : i ∈ range then
+        match (← f i h b) with
+        | .done b  => pure b
+        | .yield b =>
+          have := range.step_pos
+          loop fuel b (i + range.step) (by rw [Int.add_comm, Int.add_sub_assoc]; simp_all)
+      else
+        pure b
   have := range.step_pos
-  loop init range.start (by simp)
+  loop range.fuel init range.start (by simp)
 
 instance [Monad m] : ForIn' m IntRange Int inferInstance where
   forIn' := IntRange.forIn'
@@ -57,25 +55,17 @@ instance [Monad m] : ForIn' m IntRange Int inferInstance where
 -- No separate `ForIn` instance is required because it can be derived from `ForIn'`.
 
 @[inline] protected def forM [Monad m] (range : IntRange) (f : Int → m PUnit) : m PUnit :=
-  let rec @[specialize] loop (i : Int): m PUnit := do
-    if i ∈ range then
-      f i
-      have := range.step_pos
-      loop (i + range.step)
-    else
-      pure ⟨⟩
-  termination_by if range.step > 0 then (range.stop - i + 1).toNat else (i - range.stop + 1).toNat
-  decreasing_by
-    split
-    · rw [toNat_lt_toNat]
-      · lia
-      · simp_all [Membership.mem]
-        lia
-    · simp_all only [Membership.mem, gt_iff_lt, ite_false, ne_eq]; rw [toNat_lt_toNat]
-      · omega
-      · lia
+  let rec @[specialize] loop : Nat → Int → m PUnit
+    | 0, _ => pure ⟨⟩
+    | fuel + 1, i => do
+      if i ∈ range then
+        f i
+        have := range.step_pos
+        loop fuel (i + range.step)
+      else
+        pure ⟨⟩
   have := range.step_pos
-  loop range.start
+  loop range.fuel range.start
 
 instance [Monad m] : ForM m IntRange Int where
   forM := IntRange.forM
