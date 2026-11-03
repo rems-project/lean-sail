@@ -201,13 +201,13 @@ abbrev PreSailM (userError : Type) :=
 abbrev PreSailME ue exception :=
   FreeM (Except exception ((Except (Sail.Error ue) InstructionEffect) ⊕ FinChoice))
 
-instance: MonadExcept ue (PreSailME ue α) where
-  throw e := .impure (.ok (.inl (.error (.User e)))) Empty.elim
+instance: MonadExcept (Sail.Error ue) (PreSailME ue α) where
+  throw e := .impure (.ok (.inl (.error e))) Empty.elim
   tryCatch eff h :=
     let rec tryCatch eff h :=
       match eff with
         | .pure v => .pure v
-        | .impure (.ok (.inl (.error (.User err)))) _cont => h err
+        | .impure (.ok (.inl (.error err))) _cont => h err
         | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
     tryCatch eff h
 
@@ -402,7 +402,10 @@ def print_endline_effect (str : String) : PreSailM ue Unit :=
 
 def sailTryCatchE (eff : PreSailME ue e α) (h : ue → PreSailME ue e α)
     : PreSailME ue e α :=
-  tryCatch eff h
+  tryCatch eff fun e =>
+    match e with
+    | .User ue => h ue
+    | _ => throw e
 
 def PreSailME.run : PreSailME ue α α → PreSailM ue α
  | .pure v => .pure v
