@@ -205,13 +205,13 @@ abbrev PreSailM (userError : Type) :=
 abbrev PreSailME ue exception :=
   FreeM (Except exception ((Except (Sail.Error ue) InstructionEffect) ⊕ FinChoice))
 
-instance: MonadExcept ue (PreSailME ue α) where
-  throw e := .impure (.ok (.inl (.error (.User e)))) Empty.elim
+instance: MonadExcept (Sail.Error ue) (PreSailME ue α) where
+  throw e := .impure (.ok (.inl (.error e))) Empty.elim
   tryCatch eff h :=
     let rec tryCatch eff h :=
       match eff with
         | .pure v => .pure v
-        | .impure (.ok (.inl (.error (.User err)))) _cont => h err
+        | .impure (.ok (.inl (.error err))) _cont => h err
         | .impure eff cont => .impure eff (fun v => tryCatch (cont v) h)
     tryCatch eff h
 
@@ -305,8 +305,12 @@ def reg_deref (reg_ref : RegisterRef α) : PreSailM ue α :=
   readRegRef reg_ref
 
 @[simp_sail]
-def assert (p : Bool) (s : String) : PreSailM ue Unit :=
+def sail_assert (p : Bool) (s : String) : PreSailM ue Unit :=
   if p then .pure () else .impure (.inl (.error (.Assertion s))) Empty.elim
+
+--- Older versions of Sail used assert, which clashes with newer versions of Lean
+@[simp_sail]
+def assert (p : Bool) (s : String) : PreSailM ue Unit := sail_assert p s
 
 @[simp_sail]
 def sail_mem_read (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) :
@@ -400,9 +404,17 @@ def print_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM ue Unit
 def print_endline_effect (str : String) : PreSailM ue Unit :=
   print_effect s!"{str}\n"
 
+def prerr_effect (str : String) : PreSailM ue Unit := print_effect str
+def prerr_int_effect (str : String) (n : Int) : PreSailM ue Unit := print_int_effect str n
+def prerr_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM ue Unit := print_bits_effect str x
+def prerr_endline_effect (str : String) : PreSailM ue Unit := print_endline_effect str
+
 def sailTryCatchE (eff : PreSailME ue e α) (h : ue → PreSailME ue e α)
     : PreSailME ue e α :=
-  tryCatch eff h
+  tryCatch eff fun e =>
+    match e with
+    | .User ue => h ue
+    | _ => throw e
 
 def PreSailME.run : PreSailME ue α α → PreSailM ue α
  | .pure v => .pure v

@@ -193,8 +193,12 @@ def reg_deref (reg_ref : @RegisterRef Register RegisterType α) : PreSailM Regis
   readRegRef reg_ref
 
 @[simp_sail]
-def assert (p : Bool) (s : String) : PreSailM RegisterType c ue Unit :=
+def sail_assert (p : Bool) (s : String) : PreSailM RegisterType c ue Unit :=
   if p then pure () else throw (.Assertion s)
+
+--- Older versions of Sail used assert, which clashes with newer versions of Lean
+@[simp_sail]
+def assert (p : Bool) (s : String) : PreSailM RegisterType c ue Unit := sail_assert p s
 
 @[simp_sail]
 def writeByte (addr : Nat) (value : BitVec 8) : PreSailM RegisterType c ue PUnit := do
@@ -304,6 +308,11 @@ def print_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM Registe
 
 def print_endline_effect (str : String) : PreSailM RegisterType c ue Unit :=
   print_effect s!"{str}\n"
+
+def prerr_effect (str : String) : PreSailM RegisterType c ue Unit := print_effect str
+def prerr_int_effect (str : String) (n : Int) : PreSailM RegisterType c ue Unit := print_int_effect str n
+def prerr_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM RegisterType c ue Unit := print_bits_effect str x
+def prerr_endline_effect (str : String) : PreSailM RegisterType c ue Unit := print_endline_effect str
 
 @[simp_sail]
 def sailTryCatchE (e : ExceptT β (PreSailM RegisterType c ue) α) (h : ue → ExceptT β (PreSailM RegisterType c ue) α) : ExceptT β (PreSailM RegisterType c ue) α :=

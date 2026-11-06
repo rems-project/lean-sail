@@ -143,7 +143,7 @@ def vecbool_to_bitvec (vec : Vector Bool n) : BitVec n :=
 def bitvec_to_vecbool (bitvec : BitVec n) : Vector Bool n :=
   Vector.ofFn (fun i => BitVec.getLsb bitvec i)
 
-def charToHex (c : Char) : BitVec 4 :=
+def charToNat (c : Char) : Nat :=
   match c.toLower with
   | '0' => 0 | '1' => 1 | '2' => 2 | '3' => 3 | '4' => 4
   | '5' => 5 | '6' => 6 | '7' => 7 | '8' => 8 | '9' => 9
@@ -152,38 +152,29 @@ def charToHex (c : Char) : BitVec 4 :=
 
 def round4 (n : Nat) := ((n - 1) / 4) * 4 + 4
 
-def parse_hex_bits_digits (n : Nat) (str : String) : BitVec n :=
-  let len := str.length
-  if h : n < 4 || len = 0 then BitVec.zero n else
-    let bv := parse_hex_bits_digits (n-4) (str.take (len-1)).toString
-    let c := String.Pos.Raw.get! str ⟨len-1⟩ |> charToHex
-    BitVec.append bv c |>.cast (by simp_all)
-decreasing_by simp_all <;> omega
-
-def parse_dec_bits (n : Nat) (str : String) : BitVec n :=
-  go str.length str
-where
-  -- TODO: when there are lemmas about `String.take`, replace with WF induction
-  go (fuel : Nat) (str : String) :=
-    if fuel = 0 then 0 else
-      let lsd := String.Pos.Raw.get! str ⟨str.length - 1⟩
-      let rest := str.take (str.length - 1)
-      (charToHex lsd).setWidth n + 10#n * go (fuel-1) rest.toString
-
-def parse_hex_bits (n : Nat) (str : String) : BitVec n :=
-  let bv := parse_hex_bits_digits (round4 n) (str.drop 2).toString
-  bv.setWidth n
+def parse_hex_bits_digits (str : String) : Nat :=
+  str.toList.foldl
+    (fun i c => 16 * i + charToNat c.toLower)
+    0
 
 def valid_hex_bits (n : Nat) (str : String) : Bool :=
-  if str.length < 2 then false else
-  let str := str.drop 2 |>.toString
-  str.all fun x => x.toLower ∈
-    ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'] &&
-  2 ^ n > (parse_hex_bits_digits (round4 n) str).toNat
+  if str.length > 2 && (str.startsWith "0x" || str.startsWith "0X") then
+    let str := str.drop 2 |>.toString
+    2 ^ n > parse_hex_bits_digits str &&
+    str.all fun (x : Char) => x.toLower ∈
+     ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
+  else false
 
-def valid_dec_bits (_ : Nat) (str : String) : Bool :=
-  str.all fun (x : Char) => x.toLower ∈
-    ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+def parse_hex_bits (n : Nat) (str : String) : BitVec n :=
+  if valid_hex_bits n str then BitVec.ofInt n (parse_hex_bits_digits str) else BitVec.zero n
+
+def valid_dec_bits (n : Nat) (str : String) : Bool :=
+  str.all (fun (x : Char) => x.toLower ∈
+   ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) &&
+  str.toInt! < 2 ^ n
+
+def parse_dec_bits (n : Nat) (str : String) : BitVec n :=
+  if valid_dec_bits n str then BitVec.ofInt n str.toInt! else BitVec.zero n
 
 @[simp_sail]
 def shift_bits_left (bv : BitVec n) (sh : BitVec m) : BitVec n :=
@@ -257,7 +248,8 @@ def get_slice_int (len : Nat) (n : Int) (lo : Nat) : BitVec len :=
 
 @[simp_sail]
 def set_slice_int (len : Nat) (n : Int) (lo : Nat) (x : BitVec len) : Int :=
-  BitVec.toInt (BitVec.updateSubrange' (BitVec.ofInt len n) lo len x)
+  let old := Int.emod (n.shiftRight lo) (2 ^ len)
+  n - old.shiftLeft lo + x.toNat.shiftLeft lo
 
 @[simp_sail]
 def set_slice {n : Nat} (m : Nat) (bv : BitVec n) (start : Nat) (bv' : BitVec m) : BitVec n :=

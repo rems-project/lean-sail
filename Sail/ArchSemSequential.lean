@@ -89,10 +89,8 @@ def interpretSailEffects : PreSailM ue ty → ArchSemSeqM ue ty :=
     | .inl (.error err) => throw err
     | .inl (.ok eff) => interpretInstructionEffect eff
     | .inr choice =>
-      -- `FinChoice` is a `def` over `Nat`; name the `Nat` explicitly so instance search (which does
-      -- not unfold it) finds `Nat.decLt`.
-      let n : Nat := choice
-      if h : 0 < n then pure (⟨0, h⟩ : Fin choice) else throw .Unreachable)
+       let c : Nat := choice
+       if h : 0 < c then pure (⟨0, h⟩ : Fin choice) else throw .Unreachable)
 
 -- A function to provide a default toplevel for Sail models
 

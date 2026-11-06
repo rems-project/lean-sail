@@ -36,6 +36,8 @@ def ExceptM.run (m : ExceptM α α) : α :=
 
 namespace Sail.ConcurrencyInterfaceV1
 
+open Sail.ConcurrencyInterfaceV1.PreSail
+
 variable {Register : Type} {RegisterType : Register → Type} [DecidableEq Register] [Hashable Register]
 
 def main_of_sail_main (initialState : SequentialState RegisterType trivialChoiceSource)
@@ -107,6 +109,9 @@ instance (priority := low) : HOr (BitVec n) (BitVec m) (BitVec n) where
 
 instance (priority := low) : HXor (BitVec n) (BitVec m) (BitVec n) where
   hXor x y := x ^^^ y
+
+instance (β : α → Type) [Inhabited α] [Inhabited (β default)] : Inhabited (Σ x : α, β x) :=
+  ⟨default, default⟩
 
 instance [GetElem? coll Nat elem valid] : GetElem? coll Int elem (λ c i ↦ valid c i.toNat) where
   getElem c i h := c[i.toNat]'h
