@@ -18,6 +18,9 @@ jobs:
       ELAN_TOOLCHAIN: ${{ matrix.toolchain }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Lake fetches this checkout as an independent Git dependency.
+          fetch-depth: 0
       - name: Install Lean
         run: |
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain "$ELAN_TOOLCHAIN"
