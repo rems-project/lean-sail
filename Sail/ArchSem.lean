@@ -400,6 +400,11 @@ def print_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM ue Unit
 def print_endline_effect (str : String) : PreSailM ue Unit :=
   print_effect s!"{str}\n"
 
+def prerr_effect (str : String) : PreSailM ue Unit := print_effect str
+def prerr_int_effect (str : String) (n : Int) : PreSailM ue Unit := print_int_effect str n
+def prerr_bits_effect {w : Nat} (str : String) (x : BitVec w) : PreSailM ue Unit := print_bits_effect str x
+def prerr_endline_effect (str : String) : PreSailM ue Unit := print_endline_effect str
+
 def sailTryCatchE (eff : PreSailME ue e α) (h : ue → PreSailME ue e α)
     : PreSailME ue e α :=
   tryCatch eff fun e =>
