@@ -1,4 +1,8 @@
-import Sail.Attr
+module
+
+public import Sail.Attr
+
+@[expose] public section
 
 /-
 This notation, unlike the default `++` notation, in not elaborated as a `binop`,

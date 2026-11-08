@@ -1,4 +1,8 @@
+module
+
 -- Inclusive ranges
+
+@[expose] public section
 
 structure IntRange where
   start : Int := 0

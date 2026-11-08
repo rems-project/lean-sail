@@ -1,9 +1,13 @@
-import Sail.ArchSem
+module
 
-import Std.Data.ExtHashMap
+public import Sail.ArchSem
+
+public import Std.Data.ExtHashMap
 
 -- A simple sequential interpretation of the ArchSem interface, roughly following the previous v1
 -- interface and Christopher Lang's archsem-lean model-specific version.
+
+@[expose] public section
 
 namespace Sail.ArchSem
 
