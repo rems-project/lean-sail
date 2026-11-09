@@ -308,6 +308,12 @@ def sail_assert (p : Bool) (s : String) : PreSailM ue Unit :=
 @[simp_sail]
 def assert (p : Bool) (s : String) : PreSailM ue Unit := sail_assert p s
 
+instance : MonadLoopLimit (PreSailM ue) where
+  loopLimit msg := .impure (.inl (.error (.Assertion msg))) Empty.elim
+
+instance : MonadLoopLimit (PreSailME ue α) where
+  loopLimit msg := .impure (.ok (.inl (.error (.Assertion msg)))) Empty.elim
+
 @[simp_sail]
 def sail_mem_read (mem_req : Mem_request n nt Arch.addr_size Arch.addr_space Arch.mem_acc) :
     PreSailM ue (Result ((Vector (BitVec 8) n) × (Vector Bool nt)) Arch.abort) :=

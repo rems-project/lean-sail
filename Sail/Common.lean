@@ -6,6 +6,17 @@ which leads to Lean inserting bad coercions.
 -/
 infixl:65 " +++ "  => HAppend.hAppend
 
+/--
+A monad in which a loop with a termination measure (`whileFuelM`, `untilFuelM`) fails when it
+has used up its measure, as the loops of Sail's other theorem-prover backends do (Lem's
+`whileMT` and `untilMT` fail with "termination limit reached").
+-/
+class MonadLoopLimit (m : Type → Type) where
+  loopLimit {α : Type} (msg : String) : m α
+
+instance [Monad m] [MonadLoopLimit m] : MonadLoopLimit (ExceptT ε m) where
+  loopLimit msg := ExceptT.lift (MonadLoopLimit.loopLimit msg)
+
 def String.takeStr (s : String) (n : Nat) : String :=
   s.take n |>.toString
 
