@@ -118,6 +118,17 @@ def toFormatted {w : Nat} (x : BitVec w) : String :=
 def join1 (xs : List (BitVec 1)) : BitVec xs.length :=
   (BitVec.ofBoolListBE (xs.map fun x => x[0])).cast (by simp)
 
+/-- A single bit as a vector of length one is the bit itself: Sail's Lean backend can print such
+    a vector literal `[b]` as `b`, whose type `BitVec 1` type class resolution sees, where
+    `join1 [b]` has type `BitVec [b].length`. -/
+theorem join1_singleton (b : BitVec 1) : join1 [b] = b.cast (by simp) := by
+  have h : b = 0#1 ∨ b = 1#1 := by
+    have := b.isLt
+    rcases (show b.toNat = 0 ∨ b.toNat = 1 by omega) with h | h
+    · exact .inl (BitVec.eq_of_toNat_eq h)
+    · exact .inr (BitVec.eq_of_toNat_eq h)
+  rcases h with rfl | rfl <;> decide
+
 instance (priority := low) : Coe (BitVec (1 * n)) (BitVec n) where
   coe x := x.cast (by simp)
 
