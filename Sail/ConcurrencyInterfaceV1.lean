@@ -196,6 +196,9 @@ def sail_assert (p : Bool) (s : String) : PreSailM RegisterType c ue Unit :=
 @[simp_sail]
 def assert (p : Bool) (s : String) : PreSailM RegisterType c ue Unit := sail_assert p s
 
+instance : MonadLoopLimit (PreSailM RegisterType c ue) where
+  loopLimit msg := throw (.Assertion msg)
+
 @[simp_sail]
 def writeByte (addr : Nat) (value : BitVec 8) : PreSailM RegisterType c ue PUnit := do
   modify fun s => { s with mem := s.mem.insert addr value }

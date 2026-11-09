@@ -52,22 +52,30 @@ def main_of_sail_main (initialState : SequentialState RegisterType trivialChoice
 
 end Sail.ConcurrencyInterfaceV1
 
-def whileFuelM {α} [Monad m] (fuel : Nat) (cond : α → m Bool) (init : α) (f : α → m α)  :=
+/-
+Loops with a termination measure. As in Lem's `whileMT` and `untilMT` (and Coq's, which run one
+more iteration when the measure reaches 0), the body may run `fuel + 1` times; a loop that would
+run more fails with "termination limit reached" instead of returning its current variables.
+-/
+
+def whileFuelM {α} [Monad m] [MonadLoopLimit m] (fuel : Nat) (cond : α → m Bool) (init : α)
+    (f : α → m α) :=
   let rec go x n := do
     match n with
-    | 0 => pure x
+    | 0 => MonadLoopLimit.loopLimit "whileFuelM: termination limit reached"
     | n+1 =>
       if ←cond x then go (←f x) n else pure x
-  go init fuel
+  go init (fuel + 1)
 
-def untilFuelM {α} [Monad m] (fuel : Nat) (cond : α → m Bool) (init : α) (f : α → m α)  :=
+def untilFuelM {α} [Monad m] [MonadLoopLimit m] (fuel : Nat) (cond : α → m Bool) (init : α)
+    (f : α → m α) :=
   let rec go x n := do
     match n with
-    | 0 => pure x
+    | 0 => MonadLoopLimit.loopLimit "untilFuelM: termination limit reached"
     | n+1 =>
       let x ← f x
       if ←cond x then pure x else go x n
-  go init fuel
+  go init (fuel + 1)
 
 
 instance : CoeT Int x Nat where
