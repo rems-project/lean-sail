@@ -88,7 +88,11 @@ syntax:max "[" withoutPosition(term ":" term ":" term) "]i" : term
 macro_rules
   | `([ : $stop]i) => `({ stop := $stop, step_pos := Nat.zero_lt_one : IntRange })
   | `([ $start : $stop ]i) => `({ start := $start, stop := $stop, step_pos := Nat.zero_lt_one : IntRange })
-  | `([ $start : $stop : $step ]i) => `({ start := $start, stop := $stop, step := $step : IntRange })
-  | `([ : $stop : $step ]i) => `({ stop := $stop, step := $step : IntRange })
+  | `([ $start : $stop : $step ]i) =>
+      `({ start := $start, stop := $stop, step := $step,
+          step_pos := by first | omega | decide | sorry : IntRange })
+  | `([ : $stop : $step ]i) =>
+      `({ stop := $stop, step := $step,
+          step_pos := by first | omega | decide | sorry : IntRange })
 
 end IntRange
