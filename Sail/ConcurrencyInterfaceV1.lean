@@ -144,8 +144,11 @@ def undefined_bool (_ : Unit) : PreSailM RegisterType c ue Bool :=
 def undefined_int (_ : Unit) : PreSailM RegisterType c ue Int :=
   choose .int
 
+/-- Sail's `range(low, high)` is inclusive. An empty range (`high < low`) has no
+value to choose. -/
 def undefined_range (low high : Int) : PreSailM RegisterType c ue Int := do
-  pure (low + (← choose .int) % (high - low))
+  if high < low then throw .Unreachable
+  pure (low + (← choose .int) % (high - low + 1))
 
 def undefined_nat (_ : Unit) : PreSailM RegisterType c ue Nat :=
   choose .nat
