@@ -142,12 +142,49 @@ instance [Effect Eff] : Monad (FreeM Eff) where
   pure x := FreeM.pure x
   bind := FreeM.bind
 
+instance [Effect Eff] : LawfulMonad (FreeM Eff) := LawfulMonad.mk' (FreeM Eff)
+  (id_map := by
+    intro α x
+    change FreeM.bind x FreeM.pure = x
+    induction x with
+    | pure a => rfl
+    | impure eff cont ih =>
+      change FreeM.impure eff (fun r => FreeM.bind (cont r) FreeM.pure) = .impure eff cont
+      congr
+      funext r
+      exact ih r)
+  (pure_bind := by intros; rfl)
+  (bind_assoc := by
+    intro α β γ x f g
+    induction x with
+    | pure a => rfl
+    | impure eff cont ih =>
+      change FreeM.impure eff (fun r => FreeM.bind (FreeM.bind (cont r) f) g) =
+        .impure eff (fun r => FreeM.bind (cont r) (fun a => FreeM.bind (f a) g))
+      congr
+      funext r
+      exact ih r)
+
 def FreeM.liftM {m : Type → Type} [Monad m] [Effect Eff]
     (interp : (eff : Eff) → m (Effect.ret eff)) : FreeM Eff α → m α
   | .pure a => return a
   | .impure eff cont => do
     let res ← interp eff
     FreeM.liftM interp (cont res)
+
+omit [Arch] in
+/-- Interpreting effects preserves the source monad's sequencing. -/
+@[simp] theorem FreeM.liftM_bind {m : Type → Type} [Monad m] [LawfulMonad m] [Effect Eff]
+    (interp : (eff : Eff) → m (Effect.ret eff)) (x : FreeM Eff α) (f : α → FreeM Eff β) :
+    FreeM.liftM interp (x >>= f) = FreeM.liftM interp x >>= fun a => FreeM.liftM interp (f a) := by
+  induction x with
+  | pure a =>
+    change FreeM.liftM interp (f a) = (Pure.pure a : m α) >>= fun x => FreeM.liftM interp (f x)
+    rw [pure_bind]
+  | impure eff cont ih =>
+    change (interp eff >>= fun r => FreeM.liftM interp (cont r >>= f)) =
+      (interp eff >>= fun r => FreeM.liftM interp (cont r)) >>= fun a => FreeM.liftM interp (f a)
+    simp only [ih, bind_assoc]
 
 /--
 The ArchSem interface ISA Effect type.
@@ -217,8 +254,6 @@ inductive RegisterRef : Type → Type where
 export RegisterRef (Reg)
 
 namespace PreSail
-
-variable [Arch]
 
 @[simp_sail]
 def sailTryCatch (e : PreSailM ue α) (h : ue → PreSailM ue α) : PreSailM ue α :=
@@ -428,5 +463,30 @@ instance : MonadLift (PreSailM ue) (PreSailME ue ε) where
       | .pure v => .pure v
       | .impure eff cont => .impure (.ok eff) (fun v => lift (cont v))
     lift m
+
+@[simp] theorem PreSailME.run_pure (value : α) :
+    PreSailME.run (pure value : PreSailME ue α α) = (pure value : PreSailM ue α) := rfl
+
+@[simp] theorem PreSailME.run_throw (value : α) :
+    PreSailME.run (PreSailME.throw value : PreSailME ue α α) = (pure value : PreSailM ue α) := rfl
+
+/-- Ordinary Sail effects commute with eliminating early returns; their continuations still
+retain all early-return and error behavior. -/
+@[simp] theorem PreSailME.run_lift_bind (action : PreSailM ue α)
+    (next : α → PreSailME ue β β) :
+    PreSailME.run (liftM action >>= next) = action >>= fun value => PreSailME.run (next value) := by
+  induction action with
+  | pure value => rfl
+  | impure eff cont ih =>
+    change FreeM.impure eff (fun value => PreSailME.run (liftM (cont value) >>= next)) =
+      .impure eff (fun value => cont value >>= fun result => PreSailME.run (next result))
+    congr
+    funext value
+    exact ih value
+
+@[simp] theorem PreSailME.run_lift (action : PreSailM ue α) :
+    PreSailME.run (liftM action : PreSailME ue α α) = action := by
+  have result := PreSailME.run_lift_bind action (fun value => pure value)
+  simpa only [bind_pure, PreSailME.run_pure] using result
 
 end Sail.ArchSem.PreSail
