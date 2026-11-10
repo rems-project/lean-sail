@@ -90,6 +90,14 @@ def interpretSailEffects : PreSailM ue ty → ArchSemSeqM ue ty :=
 
 -- A function to provide a default toplevel for Sail models
 
+/-- The sequential interpreter preserves monadic sequencing, including error states. -/
+@[simp] theorem interpretSailEffects_bind (x : PreSailM ue α) (f : α → PreSailM ue β) :
+    interpretSailEffects (x >>= f) = interpretSailEffects x >>= fun a => interpretSailEffects (f a) :=
+  FreeM.liftM_bind _ x f
+
+@[simp] theorem interpretSailEffects_pure (x : α) :
+    interpretSailEffects (pure x : PreSailM ue α) = pure x := rfl
+
 def main_of_sail_main (initialState : SequentialState Arch.register_type)
     (main : Unit → PreSailM ue Unit) : IO UInt32 := do
   let res := main () |> interpretSailEffects |>.run initialState

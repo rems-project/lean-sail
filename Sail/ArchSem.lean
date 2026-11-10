@@ -142,12 +142,49 @@ instance [Effect Eff] : Monad (FreeM Eff) where
   pure x := FreeM.pure x
   bind := FreeM.bind
 
+instance [Effect Eff] : LawfulMonad (FreeM Eff) := LawfulMonad.mk' (FreeM Eff)
+  (id_map := by
+    intro α x
+    change FreeM.bind x FreeM.pure = x
+    induction x with
+    | pure a => rfl
+    | impure eff cont ih =>
+      change FreeM.impure eff (fun r => FreeM.bind (cont r) FreeM.pure) = .impure eff cont
+      congr
+      funext r
+      exact ih r)
+  (pure_bind := by intros; rfl)
+  (bind_assoc := by
+    intro α β γ x f g
+    induction x with
+    | pure a => rfl
+    | impure eff cont ih =>
+      change FreeM.impure eff (fun r => FreeM.bind (FreeM.bind (cont r) f) g) =
+        .impure eff (fun r => FreeM.bind (cont r) (fun a => FreeM.bind (f a) g))
+      congr
+      funext r
+      exact ih r)
+
 def FreeM.liftM {m : Type → Type} [Monad m] [Effect Eff]
     (interp : (eff : Eff) → m (Effect.ret eff)) : FreeM Eff α → m α
   | .pure a => return a
   | .impure eff cont => do
     let res ← interp eff
     FreeM.liftM interp (cont res)
+
+omit [Arch] in
+/-- Interpreting effects preserves the source monad's sequencing. -/
+@[simp] theorem FreeM.liftM_bind {m : Type → Type} [Monad m] [LawfulMonad m] [Effect Eff]
+    (interp : (eff : Eff) → m (Effect.ret eff)) (x : FreeM Eff α) (f : α → FreeM Eff β) :
+    FreeM.liftM interp (x >>= f) = FreeM.liftM interp x >>= fun a => FreeM.liftM interp (f a) := by
+  induction x with
+  | pure a =>
+    change FreeM.liftM interp (f a) = (Pure.pure a : m α) >>= fun x => FreeM.liftM interp (f x)
+    rw [pure_bind]
+  | impure eff cont ih =>
+    change (interp eff >>= fun r => FreeM.liftM interp (cont r >>= f)) =
+      (interp eff >>= fun r => FreeM.liftM interp (cont r)) >>= fun a => FreeM.liftM interp (f a)
+    simp only [ih, bind_assoc]
 
 /--
 The ArchSem interface ISA Effect type.
