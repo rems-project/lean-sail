@@ -255,8 +255,6 @@ export RegisterRef (Reg)
 
 namespace PreSail
 
-variable [Arch]
-
 @[simp_sail]
 def sailTryCatch (e : PreSailM ue α) (h : ue → PreSailM ue α) : PreSailM ue α :=
   match e with
@@ -465,5 +463,30 @@ instance : MonadLift (PreSailM ue) (PreSailME ue ε) where
       | .pure v => .pure v
       | .impure eff cont => .impure (.ok eff) (fun v => lift (cont v))
     lift m
+
+@[simp] theorem PreSailME.run_pure (value : α) :
+    PreSailME.run (pure value : PreSailME ue α α) = (pure value : PreSailM ue α) := rfl
+
+@[simp] theorem PreSailME.run_throw (value : α) :
+    PreSailME.run (PreSailME.throw value : PreSailME ue α α) = (pure value : PreSailM ue α) := rfl
+
+/-- Ordinary Sail effects commute with eliminating early returns; their continuations still
+retain all early-return and error behavior. -/
+@[simp] theorem PreSailME.run_lift_bind (action : PreSailM ue α)
+    (next : α → PreSailME ue β β) :
+    PreSailME.run (liftM action >>= next) = action >>= fun value => PreSailME.run (next value) := by
+  induction action with
+  | pure value => rfl
+  | impure eff cont ih =>
+    change FreeM.impure eff (fun value => PreSailME.run (liftM (cont value) >>= next)) =
+      .impure eff (fun value => cont value >>= fun result => PreSailME.run (next result))
+    congr
+    funext value
+    exact ih value
+
+@[simp] theorem PreSailME.run_lift (action : PreSailM ue α) :
+    PreSailME.run (liftM action : PreSailME ue α α) = action := by
+  have result := PreSailME.run_lift_bind action (fun value => pure value)
+  simpa only [bind_pure, PreSailME.run_pure] using result
 
 end Sail.ArchSem.PreSail
