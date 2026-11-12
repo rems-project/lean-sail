@@ -139,3 +139,18 @@ macro_rules | `(tactic| decreasing_trivial) => `(tactic|
 -- termination.
 @[wf_preprocess]
 theorem cond_eq_ite (b : Bool) (x y : α) : cond b x y = ite b x y := by cases b <;> rfl
+
+namespace Sail
+
+/-- Recent Lean versions parse `assert c m` in a `do` block as their own `assert` element.
+Sail 0.20 and earlier emit exactly that for Sail's `assert` (often the model's own specialised
+copy), so the models they generate no longer parse, whichever `assert` is defined. Every
+generated file opens `Sail`, so in those files this turns the old form back into an ordinary
+call to whichever `assert` is in scope. The identifier is unhygienic so that it resolves
+through the file's own namespaces and opens. Models generated with `sail_assert` are not
+affected. -/
+scoped macro_rules
+  | `(doElem| assert $c:term $m:term) =>
+    `(doElem| $(Lean.mkIdent `assert):ident $c $m)
+
+end Sail
